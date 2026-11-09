@@ -2,6 +2,7 @@ package ar.edu.undec.taller.controller;
 
 import ar.edu.undec.taller.model.Cliente;
 import ar.edu.undec.taller.service.ClienteService;
+import jakarta.validation.Valid;
 import java.net.URI;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,7 +21,7 @@ public class ClienteController {
 	}
 
 	@PostMapping
-	public ResponseEntity<Cliente> crear(@RequestBody Cliente cliente) {
+	public ResponseEntity<Cliente> crear(@Valid @RequestBody Cliente cliente) {
 		Cliente creado = clienteService.crear(cliente);
 		return ResponseEntity.created(URI.create("/api/clientes/" + creado.getId()))
 				.body(creado);

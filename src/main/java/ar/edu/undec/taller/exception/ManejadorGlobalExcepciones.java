@@ -1,8 +1,11 @@
 package ar.edu.undec.taller.exception;
 
+import java.util.HashMap;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -14,6 +17,19 @@ public class ManejadorGlobalExcepciones {
 		ProblemDetail problema = ProblemDetail.forStatusAndDetail(
 				HttpStatus.BAD_REQUEST, "El JSON enviado no es válido");
 		problema.setTitle("JSON inválido");
+		return problema;
+	}
+
+	@ExceptionHandler(MethodArgumentNotValidException.class)
+	public ProblemDetail datosInvalidos(MethodArgumentNotValidException excepcion) {
+		Map<String, String> errores = new HashMap<>();
+		excepcion.getBindingResult().getFieldErrors().forEach(error ->
+				errores.put(error.getField(), error.getDefaultMessage()));
+
+		ProblemDetail problema = ProblemDetail.forStatusAndDetail(
+				HttpStatus.BAD_REQUEST, "La petición tiene errores");
+		problema.setTitle("Datos inválidos");
+		problema.setProperty("errores", errores);
 		return problema;
 	}
 
