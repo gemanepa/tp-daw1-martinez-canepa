@@ -56,4 +56,21 @@ class ClienteControllerTests {
 		});
 	}
 
+	@Test
+	@Transactional
+	void jsonMalFormadoDevuelve400ConProblemDetailSinGuardarCliente() throws Exception {
+		long cantidadAnterior = clienteRepository.count();
+
+		mockMvc.perform(post("/api/clientes")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"nombre\":\"Carlos Ruiz\",\"telefono\":\"3825123456\""))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.title").value("JSON inválido"))
+				.andExpect(jsonPath("$.detail").value("El JSON enviado no es válido"));
+
+		assertThat(clienteRepository.count()).isEqualTo(cantidadAnterior);
+	}
+
 }
