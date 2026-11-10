@@ -51,4 +51,23 @@ public class VehiculoService {
 		return vehiculoRepository.save(vehiculo);
 	}
 
+	@Transactional
+	public Vehiculo actualizar(Long id, VehiculoSolicitud solicitud) {
+		Vehiculo vehiculo = buscarPorId(id);
+		Cliente cliente = clienteRepository.findById(solicitud.clienteId())
+				.orElseThrow(() -> new RecursoNoEncontradoException(
+						"No existe el cliente con id " + solicitud.clienteId()));
+
+		if (vehiculoRepository.existsByPatenteAndIdNot(solicitud.patente(), id)) {
+			throw new OperacionNoPermitidaException(
+					"Ya existe un vehículo con la patente " + solicitud.patente());
+		}
+
+		vehiculo.setPatente(solicitud.patente());
+		vehiculo.setMarca(solicitud.marca());
+		vehiculo.setModelo(solicitud.modelo());
+		vehiculo.setCliente(cliente);
+		return vehiculoRepository.save(vehiculo);
+	}
+
 }

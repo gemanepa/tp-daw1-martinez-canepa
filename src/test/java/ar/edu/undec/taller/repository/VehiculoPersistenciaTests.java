@@ -1,7 +1,9 @@
 package ar.edu.undec.taller.repository;
 
+import ar.edu.undec.taller.dto.VehiculoSolicitud;
 import ar.edu.undec.taller.model.Cliente;
 import ar.edu.undec.taller.model.Vehiculo;
+import ar.edu.undec.taller.service.VehiculoService;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,13 +23,15 @@ class VehiculoPersistenciaTests {
 	private final VehiculoRepository vehiculoRepository;
 	private final ClienteRepository clienteRepository;
 	private final EntityManager entityManager;
+	private final VehiculoService vehiculoService;
 
 	@Autowired
 	VehiculoPersistenciaTests(VehiculoRepository vehiculoRepository,
-			ClienteRepository clienteRepository, EntityManager entityManager) {
+			ClienteRepository clienteRepository, EntityManager entityManager, VehiculoService vehiculoService) {
 		this.vehiculoRepository = vehiculoRepository;
 		this.clienteRepository = clienteRepository;
 		this.entityManager = entityManager;
+		this.vehiculoService = vehiculoService;
 	}
 
 	@Test
@@ -54,6 +58,28 @@ class VehiculoPersistenciaTests {
 
 		assertThatThrownBy(() -> vehiculoRepository.saveAndFlush(nuevoVehiculo(segundo)))
 				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void actualizarConservaIdYGuardaLosDatosYLaRelacionConOtroCliente() {
+		Cliente propietario = guardarCliente("Ana Díaz");
+		Cliente otroPropietario = guardarCliente("Carlos Ruiz");
+		Vehiculo vehiculo = vehiculoRepository.saveAndFlush(nuevoVehiculo(propietario));
+		Long id = vehiculo.getId();
+		entityManager.clear();
+
+		vehiculoService.actualizar(id,
+				new VehiculoSolicitud("AB123CD", "VW", "Gol", otroPropietario.getId()));
+		entityManager.flush();
+		entityManager.clear();
+
+		Vehiculo recuperado = vehiculoRepository.findById(id).orElseThrow();
+		assertThat(recuperado.getId()).isEqualTo(id);
+		assertThat(recuperado.getPatente()).isEqualTo("AB123CD");
+		assertThat(recuperado.getMarca()).isEqualTo("VW");
+		assertThat(recuperado.getModelo()).isEqualTo("Gol");
+		assertThat(recuperado.getClienteId()).isEqualTo(otroPropietario.getId());
+		assertThat(vehiculoRepository.count()).isEqualTo(1);
 	}
 
 	private Cliente guardarCliente(String nombre) {

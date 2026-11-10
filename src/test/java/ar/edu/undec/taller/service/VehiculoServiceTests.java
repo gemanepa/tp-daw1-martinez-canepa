@@ -14,6 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -52,6 +53,29 @@ class VehiculoServiceTests {
 		assertThatThrownBy(() -> vehiculoService.crear(solicitud))
 				.isInstanceOf(OperacionNoPermitidaException.class)
 				.hasMessage("Ya existe un vehículo con la patente ABC123");
+		verify(vehiculoRepository, never()).save(any(Vehiculo.class));
+	}
+
+	@Test
+	void rechazarPatenteDeOtroAlActualizarSinModificarElVehiculo() {
+		Cliente propietario = new Cliente();
+		Vehiculo vehiculo = new Vehiculo();
+		vehiculo.setPatente("ABC123");
+		vehiculo.setMarca("Fiat");
+		vehiculo.setModelo("Cronos");
+		vehiculo.setCliente(propietario);
+		var solicitud = new VehiculoSolicitud("AB123CD", "VW", "Gol", 2L);
+		when(vehiculoRepository.findById(1L)).thenReturn(Optional.of(vehiculo));
+		when(clienteRepository.findById(2L)).thenReturn(Optional.of(new Cliente()));
+		when(vehiculoRepository.existsByPatenteAndIdNot("AB123CD", 1L)).thenReturn(true);
+
+		assertThatThrownBy(() -> vehiculoService.actualizar(1L, solicitud))
+				.isInstanceOf(OperacionNoPermitidaException.class)
+				.hasMessage("Ya existe un vehículo con la patente AB123CD");
+		assertThat(vehiculo.getPatente()).isEqualTo("ABC123");
+		assertThat(vehiculo.getMarca()).isEqualTo("Fiat");
+		assertThat(vehiculo.getModelo()).isEqualTo("Cronos");
+		assertThat(vehiculo.getCliente()).isSameAs(propietario);
 		verify(vehiculoRepository, never()).save(any(Vehiculo.class));
 	}
 
