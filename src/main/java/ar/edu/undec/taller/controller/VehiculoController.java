@@ -8,6 +8,7 @@ import java.net.URI;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,6 +27,11 @@ public class VehiculoController {
 	@GetMapping
 	public List<Vehiculo> listar() {
 		return vehiculoService.listar();
+	}
+
+	@GetMapping("/{id}")
+	public Vehiculo obtener(@PathVariable Long id) {
+		return vehiculoService.buscarPorId(id);
 	}
 
 	@PostMapping

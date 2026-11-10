@@ -83,6 +83,41 @@ class VehiculoControllerTests {
 				.andExpect(content().json(jsonEsperado));
 	}
 
+	@Test
+	void obtenerVehiculoPorIdDevuelve200ConObjetoGuardado() throws Exception {
+		Vehiculo vehiculo = guardarVehiculo("ABC123", "Fiat", "Cronos", cliente);
+
+		mockMvc.perform(get("/api/vehiculos/{id}", vehiculo.getId()))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$").isMap())
+				.andExpect(jsonPath("$.id").value(vehiculo.getId().intValue()))
+				.andExpect(jsonPath("$.patente").value("ABC123"))
+				.andExpect(jsonPath("$.marca").value("Fiat"))
+				.andExpect(jsonPath("$.modelo").value("Cronos"))
+				.andExpect(jsonPath("$.clienteId").value(cliente.getId().intValue()));
+	}
+
+	@Test
+	void obtenerVehiculoInexistenteDevuelve404ConProblemDetail() throws Exception {
+		mockMvc.perform(get("/api/vehiculos/999999"))
+				.andExpect(status().isNotFound())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(404))
+				.andExpect(jsonPath("$.title").value("Recurso no encontrado"))
+				.andExpect(jsonPath("$.detail").value("No existe el vehículo con id 999999"));
+	}
+
+	@Test
+	void idNoNumericoDevuelve400ConProblemDetail() throws Exception {
+		mockMvc.perform(get("/api/vehiculos/abc"))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.title").value("Parámetro inválido"))
+				.andExpect(jsonPath("$.detail").value("El parámetro id tiene un valor inválido"));
+	}
+
 	@ParameterizedTest
 	@ValueSource(strings = {"ABC123", "AB123CD"})
 	void crearVehiculoDevuelve201ObjetoClienteIdYLocation(String patente) throws Exception {

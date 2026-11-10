@@ -8,6 +8,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class ManejadorGlobalExcepciones {
@@ -46,6 +47,15 @@ public class ManejadorGlobalExcepciones {
 		ProblemDetail problema = ProblemDetail.forStatusAndDetail(
 				HttpStatus.CONFLICT, excepcion.getMessage());
 		problema.setTitle("Conflicto de negocio");
+		return problema;
+	}
+
+	@ExceptionHandler(MethodArgumentTypeMismatchException.class)
+	public ProblemDetail parametroInvalido(MethodArgumentTypeMismatchException excepcion) {
+		ProblemDetail problema = ProblemDetail.forStatusAndDetail(
+				HttpStatus.BAD_REQUEST,
+				"El parámetro " + excepcion.getName() + " tiene un valor inválido");
+		problema.setTitle("Parámetro inválido");
 		return problema;
 	}
 

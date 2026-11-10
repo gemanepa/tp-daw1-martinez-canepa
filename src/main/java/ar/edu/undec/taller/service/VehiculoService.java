@@ -26,6 +26,12 @@ public class VehiculoService {
 		return vehiculoRepository.findAll();
 	}
 
+	public Vehiculo buscarPorId(Long id) {
+		return vehiculoRepository.findById(id)
+				.orElseThrow(() -> new RecursoNoEncontradoException(
+						"No existe el vehículo con id " + id));
+	}
+
 	@Transactional
 	public Vehiculo crear(VehiculoSolicitud solicitud) {
 		Cliente cliente = clienteRepository.findById(solicitud.clienteId())
