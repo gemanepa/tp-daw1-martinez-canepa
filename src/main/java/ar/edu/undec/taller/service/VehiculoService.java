@@ -7,6 +7,7 @@ import ar.edu.undec.taller.model.Cliente;
 import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.repository.ClienteRepository;
 import ar.edu.undec.taller.repository.VehiculoRepository;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +20,10 @@ public class VehiculoService {
 	public VehiculoService(VehiculoRepository vehiculoRepository, ClienteRepository clienteRepository) {
 		this.vehiculoRepository = vehiculoRepository;
 		this.clienteRepository = clienteRepository;
+	}
+
+	public List<Vehiculo> listar() {
+		return vehiculoRepository.findAll();
 	}
 
 	@Transactional

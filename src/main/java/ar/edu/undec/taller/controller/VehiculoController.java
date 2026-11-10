@@ -5,7 +5,9 @@ import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.service.VehiculoService;
 import jakarta.validation.Valid;
 import java.net.URI;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -19,6 +21,11 @@ public class VehiculoController {
 
 	public VehiculoController(VehiculoService vehiculoService) {
 		this.vehiculoService = vehiculoService;
+	}
+
+	@GetMapping
+	public List<Vehiculo> listar() {
+		return vehiculoService.listar();
 	}
 
 	@PostMapping

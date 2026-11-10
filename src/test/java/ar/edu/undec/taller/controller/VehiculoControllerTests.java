@@ -1,6 +1,7 @@
 package ar.edu.undec.taller.controller;
 
 import ar.edu.undec.taller.model.Cliente;
+import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.repository.ClienteRepository;
 import ar.edu.undec.taller.repository.VehiculoRepository;
 import java.util.Set;
@@ -21,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,6 +52,35 @@ class VehiculoControllerTests {
 	@BeforeEach
 	void crearCliente() {
 		cliente = guardarCliente("Carlos Ruiz");
+	}
+
+	@Test
+	void listarSinVehiculosDevuelve200YArrayVacio() throws Exception {
+		mockMvc.perform(get("/api/vehiculos"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$").isArray())
+				.andExpect(jsonPath("$").isEmpty());
+	}
+
+	@Test
+	void listarVehiculosDevuelve200ConDatosEIdentificadores() throws Exception {
+		Vehiculo primero = guardarVehiculo("ABC123", "Fiat", "Cronos", cliente);
+		Cliente otroCliente = guardarCliente("Ana Díaz");
+		Vehiculo segundo = guardarVehiculo("AB123CD", "VW", "Gol", otroCliente);
+		String jsonEsperado = """
+				[
+				  {"id":%d,"patente":"ABC123","marca":"Fiat","modelo":"Cronos","clienteId":%d},
+				  {"id":%d,"patente":"AB123CD","marca":"VW","modelo":"Gol","clienteId":%d}
+				]
+				""".formatted(primero.getId(), cliente.getId(), segundo.getId(), otroCliente.getId());
+
+		mockMvc.perform(get("/api/vehiculos"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$").isArray())
+				.andExpect(jsonPath("$.length()").value(2))
+				.andExpect(content().json(jsonEsperado));
 	}
 
 	@ParameterizedTest
@@ -170,6 +201,15 @@ class VehiculoControllerTests {
 		nuevo.setNombre(nombre);
 		nuevo.setTelefono("3825123456");
 		return clienteRepository.saveAndFlush(nuevo);
+	}
+
+	private Vehiculo guardarVehiculo(String patente, String marca, String modelo, Cliente propietario) {
+		Vehiculo vehiculo = new Vehiculo();
+		vehiculo.setPatente(patente);
+		vehiculo.setMarca(marca);
+		vehiculo.setModelo(modelo);
+		vehiculo.setCliente(propietario);
+		return vehiculoRepository.saveAndFlush(vehiculo);
 	}
 
 	private String contenidoValido(String patente, Long clienteId) {
