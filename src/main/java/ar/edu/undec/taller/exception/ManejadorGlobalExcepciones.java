@@ -33,4 +33,20 @@ public class ManejadorGlobalExcepciones {
 		return problema;
 	}
 
+	@ExceptionHandler(RecursoNoEncontradoException.class)
+	public ProblemDetail recursoNoEncontrado(RecursoNoEncontradoException excepcion) {
+		ProblemDetail problema = ProblemDetail.forStatusAndDetail(
+				HttpStatus.NOT_FOUND, excepcion.getMessage());
+		problema.setTitle("Recurso no encontrado");
+		return problema;
+	}
+
+	@ExceptionHandler(OperacionNoPermitidaException.class)
+	public ProblemDetail operacionNoPermitida(OperacionNoPermitidaException excepcion) {
+		ProblemDetail problema = ProblemDetail.forStatusAndDetail(
+				HttpStatus.CONFLICT, excepcion.getMessage());
+		problema.setTitle("Conflicto de negocio");
+		return problema;
+	}
+
 }
