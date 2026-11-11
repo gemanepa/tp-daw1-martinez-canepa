@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -95,6 +97,67 @@ class OrdenServiceTests {
 		assertThat(actualizada.getVehiculo()).isSameAs(vehiculo);
 		assertThat(actualizada.getEstado()).isEqualTo(EstadoOrden.EN_REPARACION);
 		assertThat(actualizada.getFechaIngreso()).isEqualTo(fecha);
+	}
+
+	@ParameterizedTest
+	@CsvSource({
+			"INGRESADO, TERMINADO",
+			"INGRESADO, ENTREGADO",
+			"INGRESADO, INGRESADO",
+			"EN_REPARACION, INGRESADO",
+			"EN_REPARACION, CANCELADO",
+			"TERMINADO, CANCELADO",
+			"ENTREGADO, EN_REPARACION",
+			"CANCELADO, EN_REPARACION"
+	})
+	void rechazarTransicionNoPermitidaSinCambiarEstadoNiFechas(EstadoOrden origen, EstadoOrden destino) {
+		Orden orden = ordenEnEstado(origen);
+		Orden anterior = ordenEnEstado(origen);
+		when(ordenRepository.findById(1L)).thenReturn(Optional.of(orden));
+
+		assertThatThrownBy(() -> ordenService.cambiarEstado(1L, destino))
+				.isInstanceOf(OperacionNoPermitidaException.class)
+				.hasMessage("No se puede pasar de " + origen + " a " + destino);
+		assertThat(orden).usingRecursiveComparison().isEqualTo(anterior);
+		verify(ordenRepository, never()).save(any(Orden.class));
+	}
+
+	@Test
+	void rechazarEntregaSinCostoSinCambiarEstadoNiFechas() {
+		Orden orden = ordenEnEstado(EstadoOrden.TERMINADO);
+		orden.setCostoFinal(null);
+		Orden anterior = ordenEnEstado(EstadoOrden.TERMINADO);
+		anterior.setCostoFinal(null);
+		when(ordenRepository.findById(1L)).thenReturn(Optional.of(orden));
+
+		assertThatThrownBy(() -> ordenService.cambiarEstado(1L, EstadoOrden.ENTREGADO))
+				.isInstanceOf(OperacionNoPermitidaException.class)
+				.hasMessage("No se puede entregar una orden sin costo final");
+		assertThat(orden).usingRecursiveComparison().isEqualTo(anterior);
+		verify(ordenRepository, never()).save(any(Orden.class));
+	}
+
+	private Orden ordenEnEstado(EstadoOrden estado) {
+		LocalDateTime ingreso = LocalDateTime.of(2026, 11, 10, 10, 0);
+		Orden orden = new Orden();
+		orden.setVehiculo(new Vehiculo());
+		orden.setDescripcion("Revisión previa");
+		orden.setEstado(estado);
+		orden.setFechaIngreso(ingreso);
+		orden.setCostoFinal(new BigDecimal("45000.75"));
+		if (estado == EstadoOrden.EN_REPARACION || estado == EstadoOrden.TERMINADO || estado == EstadoOrden.ENTREGADO) {
+			orden.setFechaInicioReparacion(ingreso.plusHours(1));
+		}
+		if (estado == EstadoOrden.TERMINADO || estado == EstadoOrden.ENTREGADO) {
+			orden.setFechaTerminacion(ingreso.plusHours(2));
+		}
+		if (estado == EstadoOrden.ENTREGADO) {
+			orden.setFechaEntrega(ingreso.plusHours(3));
+		}
+		if (estado == EstadoOrden.CANCELADO) {
+			orden.setFechaCancelacion(ingreso.plusHours(1));
+		}
+		return orden;
 	}
 
 }

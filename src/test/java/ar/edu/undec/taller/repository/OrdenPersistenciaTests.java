@@ -2,6 +2,7 @@ package ar.edu.undec.taller.repository;
 
 import ar.edu.undec.taller.dto.OrdenActualizacionSolicitud;
 import ar.edu.undec.taller.dto.OrdenSolicitud;
+import ar.edu.undec.taller.exception.OperacionNoPermitidaException;
 import ar.edu.undec.taller.model.Cliente;
 import ar.edu.undec.taller.model.EstadoOrden;
 import ar.edu.undec.taller.model.Orden;
@@ -21,6 +22,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -103,6 +105,78 @@ class OrdenPersistenciaTests {
 		assertThat(ordenRepository.count()).isEqualTo(1);
 	}
 
+	@Test
+	void guardarFechasDeReparacionTerminacionYEntregaSinPerderLasAnteriores() {
+		Orden creada = ordenService.crear(new OrdenSolicitud(vehiculo.getId(), "Cambio de aceite"));
+		Long id = creada.getId();
+		LocalDateTime ingreso = recargarOrden(id).getFechaIngreso();
+
+		ordenService.cambiarEstado(id, EstadoOrden.EN_REPARACION);
+		LocalDateTime inicio = recargarOrden(id).getFechaInicioReparacion();
+		assertThat(inicio).isAfterOrEqualTo(ingreso);
+
+		ordenService.cambiarEstado(id, EstadoOrden.TERMINADO);
+		Orden terminada = recargarOrden(id);
+		LocalDateTime terminacion = terminada.getFechaTerminacion();
+		assertThat(terminacion).isAfterOrEqualTo(inicio);
+		assertThat(terminada.getFechaInicioReparacion()).isEqualTo(inicio);
+
+		ordenService.actualizar(id,
+				new OrdenActualizacionSolicitud("Cambio de aceite y filtro", new BigDecimal("45000.75")));
+		Orden conCosto = recargarOrden(id);
+		assertThat(conCosto.getFechaInicioReparacion()).isEqualTo(inicio);
+		assertThat(conCosto.getFechaTerminacion()).isEqualTo(terminacion);
+
+		ordenService.cambiarEstado(id, EstadoOrden.ENTREGADO);
+		Orden entregada = recargarOrden(id);
+		assertThat(entregada.getEstado()).isEqualTo(EstadoOrden.ENTREGADO);
+		assertThat(entregada.getFechaIngreso()).isEqualTo(ingreso);
+		assertThat(entregada.getFechaInicioReparacion()).isEqualTo(inicio);
+		assertThat(entregada.getFechaTerminacion()).isEqualTo(terminacion);
+		assertThat(entregada.getFechaEntrega()).isAfterOrEqualTo(terminacion);
+		assertThat(entregada.getFechaCancelacion()).isNull();
+		assertThat(entregada.getCostoFinal()).isEqualByComparingTo("45000.75");
+		assertThat(entregada.getVehiculoId()).isEqualTo(vehiculo.getId());
+	}
+
+	@Test
+	void guardarFechaDeCancelacionDesdeIngresado() {
+		Orden creada = ordenService.crear(new OrdenSolicitud(vehiculo.getId(), "Cambio de aceite"));
+		Long id = creada.getId();
+		LocalDateTime ingreso = recargarOrden(id).getFechaIngreso();
+
+		ordenService.cambiarEstado(id, EstadoOrden.CANCELADO);
+		Orden cancelada = recargarOrden(id);
+
+		assertThat(cancelada.getEstado()).isEqualTo(EstadoOrden.CANCELADO);
+		assertThat(cancelada.getFechaIngreso()).isEqualTo(ingreso);
+		assertThat(cancelada.getFechaCancelacion()).isAfterOrEqualTo(ingreso);
+		assertThat(cancelada.getFechaInicioReparacion()).isNull();
+		assertThat(cancelada.getFechaTerminacion()).isNull();
+		assertThat(cancelada.getFechaEntrega()).isNull();
+	}
+
+	@Test
+	void transicionRechazadaConservaEstadoYFechasEnLaBase() {
+		Orden creada = ordenService.crear(new OrdenSolicitud(vehiculo.getId(), "Cambio de aceite"));
+		Long id = creada.getId();
+		ordenService.cambiarEstado(id, EstadoOrden.EN_REPARACION);
+		Orden anterior = recargarOrden(id);
+		LocalDateTime ingreso = anterior.getFechaIngreso();
+		LocalDateTime inicio = anterior.getFechaInicioReparacion();
+
+		assertThatThrownBy(() -> ordenService.cambiarEstado(id, EstadoOrden.CANCELADO))
+				.isInstanceOf(OperacionNoPermitidaException.class);
+		Orden recuperada = recargarOrden(id);
+
+		assertThat(recuperada.getEstado()).isEqualTo(EstadoOrden.EN_REPARACION);
+		assertThat(recuperada.getFechaIngreso()).isEqualTo(ingreso);
+		assertThat(recuperada.getFechaInicioReparacion()).isEqualTo(inicio);
+		assertThat(recuperada.getFechaTerminacion()).isNull();
+		assertThat(recuperada.getFechaEntrega()).isNull();
+		assertThat(recuperada.getFechaCancelacion()).isNull();
+	}
+
 	@ParameterizedTest
 	@CsvSource({
 			"INGRESADO, true",
@@ -122,6 +196,12 @@ class OrdenPersistenciaTests {
 
 		assertThat(ordenRepository.existsByVehiculo_IdAndEstadoNotIn(vehiculo.getId(),
 				List.of(EstadoOrden.ENTREGADO, EstadoOrden.CANCELADO))).isEqualTo(abierta);
+	}
+
+	private Orden recargarOrden(Long id) {
+		entityManager.flush();
+		entityManager.clear();
+		return ordenRepository.findById(id).orElseThrow();
 	}
 
 }

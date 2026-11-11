@@ -65,4 +65,33 @@ public class OrdenService {
 		return ordenRepository.save(orden);
 	}
 
+	@Transactional
+	public Orden cambiarEstado(Long id, EstadoOrden nuevoEstado) {
+		Orden orden = buscarPorId(id);
+		boolean permitida = switch (orden.getEstado()) {
+			case INGRESADO -> nuevoEstado == EstadoOrden.EN_REPARACION || nuevoEstado == EstadoOrden.CANCELADO;
+			case EN_REPARACION -> nuevoEstado == EstadoOrden.TERMINADO;
+			case TERMINADO -> nuevoEstado == EstadoOrden.ENTREGADO;
+			case ENTREGADO, CANCELADO -> false;
+		};
+
+		if (!permitida) {
+			throw new OperacionNoPermitidaException(
+					"No se puede pasar de " + orden.getEstado() + " a " + nuevoEstado);
+		}
+		if (nuevoEstado == EstadoOrden.ENTREGADO && orden.getCostoFinal() == null) {
+			throw new OperacionNoPermitidaException("No se puede entregar una orden sin costo final");
+		}
+
+		LocalDateTime fecha = LocalDateTime.now();
+		switch (nuevoEstado) {
+			case EN_REPARACION -> orden.setFechaInicioReparacion(fecha);
+			case TERMINADO -> orden.setFechaTerminacion(fecha);
+			case ENTREGADO -> orden.setFechaEntrega(fecha);
+			case CANCELADO -> orden.setFechaCancelacion(fecha);
+		}
+		orden.setEstado(nuevoEstado);
+		return ordenRepository.save(orden);
+	}
+
 }
