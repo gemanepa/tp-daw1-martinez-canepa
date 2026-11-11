@@ -24,6 +24,13 @@ public class OrdenService {
 		this.vehiculoRepository = vehiculoRepository;
 	}
 
+	public List<Orden> listar(EstadoOrden estado) {
+		if (estado == null) {
+			return ordenRepository.findAll();
+		}
+		return ordenRepository.findByEstado(estado);
+	}
+
 	@Transactional
 	public Orden crear(OrdenSolicitud solicitud) {
 		Vehiculo vehiculo = vehiculoRepository.findById(solicitud.vehiculoId())

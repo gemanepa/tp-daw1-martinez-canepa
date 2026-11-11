@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -62,6 +63,74 @@ class OrdenControllerTests {
 		cliente.setTelefono("3825123456");
 		clienteRepository.saveAndFlush(cliente);
 		vehiculo = guardarVehiculo("ABC123");
+	}
+
+	@Test
+	void listarSinOrdenesDevuelve200YArrayVacio() throws Exception {
+		mockMvc.perform(get("/api/ordenes"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$").isArray())
+				.andExpect(jsonPath("$").isEmpty());
+	}
+
+	@Test
+	void listarSinFiltroDevuelveTodasLasOrdenesConSusIdentificadores() throws Exception {
+		Orden primera = guardarOrden(vehiculo, EstadoOrden.INGRESADO);
+		Vehiculo otroVehiculo = guardarVehiculo("AB123CD");
+		Orden segunda = guardarOrden(otroVehiculo, EstadoOrden.EN_REPARACION);
+		String jsonEsperado = """
+				[
+				  {"id":%d,"vehiculoId":%d,"descripcion":"Revisión previa","estado":"INGRESADO"},
+				  {"id":%d,"vehiculoId":%d,"descripcion":"Revisión previa","estado":"EN_REPARACION"}
+				]
+				""".formatted(primera.getId(), vehiculo.getId(), segunda.getId(), otroVehiculo.getId());
+
+		mockMvc.perform(get("/api/ordenes"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$").isArray())
+				.andExpect(jsonPath("$.length()").value(2))
+				.andExpect(content().json(jsonEsperado));
+	}
+
+	@ParameterizedTest
+	@EnumSource(EstadoOrden.class)
+	void filtrarPorCualquierEstadoValidoDevuelveSoloLasOrdenesDeEseEstado(EstadoOrden estado) throws Exception {
+		Orden esperada = guardarOrden(vehiculo, estado);
+		Vehiculo otroVehiculo = guardarVehiculo("AB123CD");
+		EstadoOrden otroEstado = estado == EstadoOrden.INGRESADO ? EstadoOrden.CANCELADO : EstadoOrden.INGRESADO;
+		guardarOrden(otroVehiculo, otroEstado);
+
+		mockMvc.perform(get("/api/ordenes").param("estado", estado.name()))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$").isArray())
+				.andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].id").value(esperada.getId().intValue()))
+				.andExpect(jsonPath("$[0].vehiculoId").value(vehiculo.getId().intValue()))
+				.andExpect(jsonPath("$[0].estado").value(estado.name()));
+	}
+
+	@Test
+	void filtroSinCoincidenciasDevuelve200YArrayVacio() throws Exception {
+		guardarOrden(vehiculo, EstadoOrden.INGRESADO);
+
+		mockMvc.perform(get("/api/ordenes").param("estado", "EN_REPARACION"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$").isArray())
+				.andExpect(jsonPath("$").isEmpty());
+	}
+
+	@Test
+	void estadoInvalidoDevuelve400ConProblemDetail() throws Exception {
+		mockMvc.perform(get("/api/ordenes").param("estado", "INEXISTENTE"))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.title").value("Parámetro inválido"))
+				.andExpect(jsonPath("$.detail").value("El parámetro estado tiene un valor inválido"));
 	}
 
 	@Test
@@ -209,13 +278,13 @@ class OrdenControllerTests {
 		return vehiculoRepository.saveAndFlush(nuevo);
 	}
 
-	private void guardarOrden(Vehiculo vehiculo, EstadoOrden estado) {
+	private Orden guardarOrden(Vehiculo vehiculo, EstadoOrden estado) {
 		Orden orden = new Orden();
 		orden.setVehiculo(vehiculo);
 		orden.setDescripcion("Revisión previa");
 		orden.setEstado(estado);
 		orden.setFechaIngreso(LocalDateTime.of(2026, 11, 10, 10, 0));
-		ordenRepository.saveAndFlush(orden);
+		return ordenRepository.saveAndFlush(orden);
 	}
 
 	private String contenidoValido(Long vehiculoId) {
