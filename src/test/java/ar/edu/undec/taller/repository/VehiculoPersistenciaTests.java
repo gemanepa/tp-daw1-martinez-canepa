@@ -1,11 +1,18 @@
 package ar.edu.undec.taller.repository;
 
 import ar.edu.undec.taller.dto.VehiculoSolicitud;
+import ar.edu.undec.taller.exception.OperacionNoPermitidaException;
 import ar.edu.undec.taller.model.Cliente;
+import ar.edu.undec.taller.model.EstadoOrden;
+import ar.edu.undec.taller.model.Orden;
 import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.service.VehiculoService;
 import jakarta.persistence.EntityManager;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -24,14 +31,17 @@ class VehiculoPersistenciaTests {
 	private final ClienteRepository clienteRepository;
 	private final EntityManager entityManager;
 	private final VehiculoService vehiculoService;
+	private final OrdenRepository ordenRepository;
 
 	@Autowired
 	VehiculoPersistenciaTests(VehiculoRepository vehiculoRepository,
-			ClienteRepository clienteRepository, EntityManager entityManager, VehiculoService vehiculoService) {
+			ClienteRepository clienteRepository, EntityManager entityManager, VehiculoService vehiculoService,
+			OrdenRepository ordenRepository) {
 		this.vehiculoRepository = vehiculoRepository;
 		this.clienteRepository = clienteRepository;
 		this.entityManager = entityManager;
 		this.vehiculoService = vehiculoService;
+		this.ordenRepository = ordenRepository;
 	}
 
 	@Test
@@ -80,6 +90,46 @@ class VehiculoPersistenciaTests {
 		assertThat(recuperado.getModelo()).isEqualTo("Gol");
 		assertThat(recuperado.getClienteId()).isEqualTo(otroPropietario.getId());
 		assertThat(vehiculoRepository.count()).isEqualTo(1);
+	}
+
+	@Test
+	void eliminarVehiculoPersisteElBorradoYConservaAlCliente() {
+		Cliente cliente = guardarCliente("Ana Díaz");
+		Vehiculo vehiculo = vehiculoRepository.saveAndFlush(nuevoVehiculo(cliente));
+
+		vehiculoService.eliminar(vehiculo.getId());
+		entityManager.flush();
+		entityManager.clear();
+
+		assertThat(vehiculoRepository.findById(vehiculo.getId())).isEmpty();
+		assertThat(clienteRepository.findById(cliente.getId())).isPresent();
+	}
+
+	@ParameterizedTest
+	@EnumSource(EstadoOrden.class)
+	void rechazarBorradoConservaElVehiculoYSuOrdenEnCualquierEstado(EstadoOrden estado) {
+		Cliente cliente = guardarCliente("Ana Díaz");
+		Vehiculo vehiculo = vehiculoRepository.saveAndFlush(nuevoVehiculo(cliente));
+		Orden orden = new Orden();
+		orden.setVehiculo(vehiculo);
+		orden.setDescripcion("Cambio de aceite");
+		orden.setEstado(estado);
+		orden.setFechaIngreso(LocalDateTime.of(2026, 11, 10, 9, 0));
+		orden.setCostoFinal(new BigDecimal("25000.00"));
+		ordenRepository.saveAndFlush(orden);
+		entityManager.clear();
+
+		assertThatThrownBy(() -> vehiculoService.eliminar(vehiculo.getId()))
+				.isInstanceOf(OperacionNoPermitidaException.class);
+		entityManager.flush();
+		entityManager.clear();
+
+		Vehiculo conservado = vehiculoRepository.findById(vehiculo.getId()).orElseThrow();
+		assertThat(conservado).usingRecursiveComparison().ignoringFields("cliente").isEqualTo(vehiculo);
+		assertThat(conservado.getClienteId()).isEqualTo(cliente.getId());
+		Orden conservada = ordenRepository.findById(orden.getId()).orElseThrow();
+		assertThat(conservada).usingRecursiveComparison().ignoringFields("vehiculo").isEqualTo(orden);
+		assertThat(conservada.getVehiculoId()).isEqualTo(vehiculo.getId());
 	}
 
 	private Cliente guardarCliente(String nombre) {

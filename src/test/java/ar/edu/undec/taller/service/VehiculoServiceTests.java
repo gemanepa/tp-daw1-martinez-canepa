@@ -6,6 +6,7 @@ import ar.edu.undec.taller.exception.RecursoNoEncontradoException;
 import ar.edu.undec.taller.model.Cliente;
 import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.repository.ClienteRepository;
+import ar.edu.undec.taller.repository.OrdenRepository;
 import ar.edu.undec.taller.repository.VehiculoRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,9 @@ class VehiculoServiceTests {
 
 	@Mock
 	private ClienteRepository clienteRepository;
+
+	@Mock
+	private OrdenRepository ordenRepository;
 
 	@InjectMocks
 	private VehiculoService vehiculoService;
@@ -77,6 +81,18 @@ class VehiculoServiceTests {
 		assertThat(vehiculo.getModelo()).isEqualTo("Cronos");
 		assertThat(vehiculo.getCliente()).isSameAs(propietario);
 		verify(vehiculoRepository, never()).save(any(Vehiculo.class));
+	}
+
+	@Test
+	void rechazarBorradoConOrdenesAsociadasSinEliminarVehiculo() {
+		Vehiculo vehiculo = new Vehiculo();
+		when(vehiculoRepository.findById(1L)).thenReturn(Optional.of(vehiculo));
+		when(ordenRepository.existsByVehiculo_Id(1L)).thenReturn(true);
+
+		assertThatThrownBy(() -> vehiculoService.eliminar(1L))
+				.isInstanceOf(OperacionNoPermitidaException.class)
+				.hasMessage("El vehículo tiene órdenes asociadas");
+		verify(vehiculoRepository, never()).delete(any(Vehiculo.class));
 	}
 
 }

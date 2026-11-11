@@ -6,6 +6,7 @@ import ar.edu.undec.taller.exception.RecursoNoEncontradoException;
 import ar.edu.undec.taller.model.Cliente;
 import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.repository.ClienteRepository;
+import ar.edu.undec.taller.repository.OrdenRepository;
 import ar.edu.undec.taller.repository.VehiculoRepository;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -16,10 +17,13 @@ public class VehiculoService {
 
 	private final VehiculoRepository vehiculoRepository;
 	private final ClienteRepository clienteRepository;
+	private final OrdenRepository ordenRepository;
 
-	public VehiculoService(VehiculoRepository vehiculoRepository, ClienteRepository clienteRepository) {
+	public VehiculoService(VehiculoRepository vehiculoRepository, ClienteRepository clienteRepository,
+			OrdenRepository ordenRepository) {
 		this.vehiculoRepository = vehiculoRepository;
 		this.clienteRepository = clienteRepository;
+		this.ordenRepository = ordenRepository;
 	}
 
 	public List<Vehiculo> listar() {
@@ -68,6 +72,15 @@ public class VehiculoService {
 		vehiculo.setModelo(solicitud.modelo());
 		vehiculo.setCliente(cliente);
 		return vehiculoRepository.save(vehiculo);
+	}
+
+	@Transactional
+	public void eliminar(Long id) {
+		Vehiculo vehiculo = buscarPorId(id);
+		if (ordenRepository.existsByVehiculo_Id(id)) {
+			throw new OperacionNoPermitidaException("El vehículo tiene órdenes asociadas");
+		}
+		vehiculoRepository.delete(vehiculo);
 	}
 
 }

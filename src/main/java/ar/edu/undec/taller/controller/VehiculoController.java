@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -45,6 +46,12 @@ public class VehiculoController {
 	@PutMapping("/{id}")
 	public Vehiculo actualizar(@PathVariable Long id, @Valid @RequestBody VehiculoSolicitud solicitud) {
 		return vehiculoService.actualizar(id, solicitud);
+	}
+
+	@DeleteMapping("/{id}")
+	public ResponseEntity<Void> eliminar(@PathVariable Long id) {
+		vehiculoService.eliminar(id);
+		return ResponseEntity.noContent().build();
 	}
 
 }

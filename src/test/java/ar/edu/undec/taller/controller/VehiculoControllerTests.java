@@ -1,9 +1,13 @@
 package ar.edu.undec.taller.controller;
 
 import ar.edu.undec.taller.model.Cliente;
+import ar.edu.undec.taller.model.EstadoOrden;
+import ar.edu.undec.taller.model.Orden;
 import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.repository.ClienteRepository;
+import ar.edu.undec.taller.repository.OrdenRepository;
 import ar.edu.undec.taller.repository.VehiculoRepository;
+import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -38,16 +43,18 @@ class VehiculoControllerTests {
 	private final MockMvc mockMvc;
 	private final ClienteRepository clienteRepository;
 	private final VehiculoRepository vehiculoRepository;
+	private final OrdenRepository ordenRepository;
 	private final JsonMapper jsonMapper;
 	private Cliente cliente;
 
 	@Autowired
 	VehiculoControllerTests(MockMvc mockMvc, ClienteRepository clienteRepository,
-			VehiculoRepository vehiculoRepository, JsonMapper jsonMapper) {
+			VehiculoRepository vehiculoRepository, JsonMapper jsonMapper, OrdenRepository ordenRepository) {
 		this.mockMvc = mockMvc;
 		this.clienteRepository = clienteRepository;
 		this.vehiculoRepository = vehiculoRepository;
 		this.jsonMapper = jsonMapper;
+		this.ordenRepository = ordenRepository;
 	}
 
 	@BeforeEach
@@ -339,6 +346,70 @@ class VehiculoControllerTests {
 				.andExpect(jsonPath("$.detail").value("El JSON enviado no es válido"));
 
 		comprobarVehiculoSinCambios(vehiculo.getId());
+	}
+
+	@Test
+	void eliminarVehiculoDevuelve204SinCuerpoYLaConsultaPosteriorDevuelve404() throws Exception {
+		Vehiculo vehiculo = guardarVehiculo("ABC123", "Fiat", "Cronos", cliente);
+
+		mockMvc.perform(delete("/api/vehiculos/{id}", vehiculo.getId()))
+				.andExpect(status().isNoContent())
+				.andExpect(content().string(""));
+
+		mockMvc.perform(get("/api/vehiculos/{id}", vehiculo.getId()))
+				.andExpect(status().isNotFound())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(404))
+				.andExpect(jsonPath("$.title").value("Recurso no encontrado"))
+				.andExpect(jsonPath("$.detail").value("No existe el vehículo con id " + vehiculo.getId()));
+		assertThat(vehiculoRepository.findById(vehiculo.getId())).isEmpty();
+		assertThat(clienteRepository.findById(cliente.getId())).isPresent();
+	}
+
+	@Test
+	void eliminarVehiculoInexistenteDevuelve404ConProblemDetail() throws Exception {
+		mockMvc.perform(delete("/api/vehiculos/999999"))
+				.andExpect(status().isNotFound())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(404))
+				.andExpect(jsonPath("$.title").value("Recurso no encontrado"))
+				.andExpect(jsonPath("$.detail").value("No existe el vehículo con id 999999"));
+	}
+
+	@Test
+	void eliminarConIdNoNumericoDevuelve400ConProblemDetail() throws Exception {
+		mockMvc.perform(delete("/api/vehiculos/abc"))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.title").value("Parámetro inválido"))
+				.andExpect(jsonPath("$.detail").value("El parámetro id tiene un valor inválido"));
+	}
+
+	@Test
+	void eliminarVehiculoConOrdenDevuelve409SinBorrarSusDatos() throws Exception {
+		Vehiculo vehiculo = guardarVehiculo("ABC123", "Fiat", "Cronos", cliente);
+		Orden orden = new Orden();
+		orden.setVehiculo(vehiculo);
+		orden.setDescripcion("Cambio de aceite");
+		orden.setEstado(EstadoOrden.INGRESADO);
+		orden.setFechaIngreso(LocalDateTime.of(2026, 11, 10, 9, 0));
+		ordenRepository.saveAndFlush(orden);
+
+		mockMvc.perform(delete("/api/vehiculos/{id}", vehiculo.getId()))
+				.andExpect(status().isConflict())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(409))
+				.andExpect(jsonPath("$.title").value("Conflicto de negocio"))
+				.andExpect(jsonPath("$.detail").value("El vehículo tiene órdenes asociadas"));
+
+		comprobarVehiculoSinCambios(vehiculo.getId());
+		assertThat(ordenRepository.findById(orden.getId())).hasValueSatisfying(conservada -> {
+			assertThat(conservada.getVehiculoId()).isEqualTo(vehiculo.getId());
+			assertThat(conservada.getDescripcion()).isEqualTo("Cambio de aceite");
+			assertThat(conservada.getEstado()).isEqualTo(EstadoOrden.INGRESADO);
+			assertThat(conservada.getFechaIngreso()).isEqualTo(orden.getFechaIngreso());
+		});
 	}
 
 	static Stream<Arguments> vehiculosInvalidos() {
