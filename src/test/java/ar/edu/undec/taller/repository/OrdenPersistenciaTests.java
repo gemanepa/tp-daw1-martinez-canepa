@@ -177,6 +177,57 @@ class OrdenPersistenciaTests {
 		assertThat(recuperada.getFechaCancelacion()).isNull();
 	}
 
+	@Test
+	void entregarPermiteGuardarOtraOrdenYConservarLaEntregada() {
+		Long primeraId = ordenService.crear(new OrdenSolicitud(vehiculo.getId(), "Cambio de aceite")).getId();
+		recargarOrden(primeraId);
+		comprobarRechazoDeOtraOrdenAbierta();
+		ordenService.cambiarEstado(primeraId, EstadoOrden.EN_REPARACION);
+		recargarOrden(primeraId);
+		comprobarRechazoDeOtraOrdenAbierta();
+		ordenService.cambiarEstado(primeraId, EstadoOrden.TERMINADO);
+		recargarOrden(primeraId);
+		comprobarRechazoDeOtraOrdenAbierta();
+		ordenService.actualizar(primeraId,
+				new OrdenActualizacionSolicitud("Cambio de aceite y filtro", new BigDecimal("45000.75")));
+		ordenService.cambiarEstado(primeraId, EstadoOrden.ENTREGADO);
+		recargarOrden(primeraId);
+
+		Long nuevaId = ordenService.crear(new OrdenSolicitud(vehiculo.getId(), "Revisar frenos")).getId();
+		Orden nueva = recargarOrden(nuevaId);
+		Orden entregada = ordenRepository.findById(primeraId).orElseThrow();
+
+		assertThat(nuevaId).isNotEqualTo(primeraId);
+		assertThat(nueva.getEstado()).isEqualTo(EstadoOrden.INGRESADO);
+		assertThat(nueva.getVehiculoId()).isEqualTo(vehiculo.getId());
+		assertThat(entregada.getEstado()).isEqualTo(EstadoOrden.ENTREGADO);
+		assertThat(entregada.getFechaEntrega()).isNotNull();
+		assertThat(entregada.getCostoFinal()).isEqualByComparingTo("45000.75");
+		comprobarRechazoDeOtraOrdenAbierta();
+		assertThat(ordenRepository.count()).isEqualTo(2);
+	}
+
+	@Test
+	void cancelarPermiteGuardarOtraOrdenYConservarLaCancelada() {
+		Long primeraId = ordenService.crear(new OrdenSolicitud(vehiculo.getId(), "Cambio de aceite")).getId();
+		recargarOrden(primeraId);
+		comprobarRechazoDeOtraOrdenAbierta();
+		ordenService.cambiarEstado(primeraId, EstadoOrden.CANCELADO);
+		recargarOrden(primeraId);
+
+		Long nuevaId = ordenService.crear(new OrdenSolicitud(vehiculo.getId(), "Revisar frenos")).getId();
+		Orden nueva = recargarOrden(nuevaId);
+		Orden cancelada = ordenRepository.findById(primeraId).orElseThrow();
+
+		assertThat(nuevaId).isNotEqualTo(primeraId);
+		assertThat(nueva.getEstado()).isEqualTo(EstadoOrden.INGRESADO);
+		assertThat(nueva.getVehiculoId()).isEqualTo(vehiculo.getId());
+		assertThat(cancelada.getEstado()).isEqualTo(EstadoOrden.CANCELADO);
+		assertThat(cancelada.getFechaCancelacion()).isNotNull();
+		comprobarRechazoDeOtraOrdenAbierta();
+		assertThat(ordenRepository.count()).isEqualTo(2);
+	}
+
 	@ParameterizedTest
 	@CsvSource({
 			"INGRESADO, true",
@@ -202,6 +253,16 @@ class OrdenPersistenciaTests {
 		entityManager.flush();
 		entityManager.clear();
 		return ordenRepository.findById(id).orElseThrow();
+	}
+
+	private void comprobarRechazoDeOtraOrdenAbierta() {
+		long cantidadAnterior = ordenRepository.count();
+		assertThatThrownBy(() -> ordenService.crear(new OrdenSolicitud(vehiculo.getId(), "Intento duplicado")))
+				.isInstanceOf(OperacionNoPermitidaException.class)
+				.hasMessage("El vehículo ya tiene una orden abierta");
+		entityManager.flush();
+		entityManager.clear();
+		assertThat(ordenRepository.count()).isEqualTo(cantidadAnterior);
 	}
 
 }
