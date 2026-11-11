@@ -1,5 +1,6 @@
 package ar.edu.undec.taller.service;
 
+import ar.edu.undec.taller.dto.OrdenActualizacionSolicitud;
 import ar.edu.undec.taller.dto.OrdenSolicitud;
 import ar.edu.undec.taller.exception.OperacionNoPermitidaException;
 import ar.edu.undec.taller.exception.RecursoNoEncontradoException;
@@ -8,6 +9,7 @@ import ar.edu.undec.taller.model.Orden;
 import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.repository.OrdenRepository;
 import ar.edu.undec.taller.repository.VehiculoRepository;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -71,6 +73,28 @@ class OrdenServiceTests {
 				.isInstanceOf(OperacionNoPermitidaException.class)
 				.hasMessage("El vehículo ya tiene una orden abierta");
 		verify(ordenRepository, never()).save(any(Orden.class));
+	}
+
+	@Test
+	void actualizarSoloDescripcionYCostoConservaRelacionEstadoYFecha() {
+		Vehiculo vehiculo = new Vehiculo();
+		LocalDateTime fecha = LocalDateTime.of(2026, 11, 10, 10, 0);
+		Orden orden = new Orden();
+		orden.setVehiculo(vehiculo);
+		orden.setDescripcion("Revisión previa");
+		orden.setEstado(EstadoOrden.EN_REPARACION);
+		orden.setFechaIngreso(fecha);
+		when(ordenRepository.findById(1L)).thenReturn(Optional.of(orden));
+		when(ordenRepository.save(orden)).thenReturn(orden);
+
+		Orden actualizada = ordenService.actualizar(1L,
+				new OrdenActualizacionSolicitud("Cambio de aceite y filtro", new BigDecimal("45000.75")));
+
+		assertThat(actualizada.getDescripcion()).isEqualTo("Cambio de aceite y filtro");
+		assertThat(actualizada.getCostoFinal()).isEqualByComparingTo("45000.75");
+		assertThat(actualizada.getVehiculo()).isSameAs(vehiculo);
+		assertThat(actualizada.getEstado()).isEqualTo(EstadoOrden.EN_REPARACION);
+		assertThat(actualizada.getFechaIngreso()).isEqualTo(fecha);
 	}
 
 }

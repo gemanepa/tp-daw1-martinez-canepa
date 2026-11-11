@@ -7,6 +7,7 @@ import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.repository.ClienteRepository;
 import ar.edu.undec.taller.repository.OrdenRepository;
 import ar.edu.undec.taller.repository.VehiculoRepository;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -28,6 +29,7 @@ import tools.jackson.databind.json.JsonMapper;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -258,6 +260,129 @@ class OrdenControllerTests {
 		assertThat(ordenRepository.count()).isEqualTo(cantidadAnterior);
 	}
 
+	@Test
+	void actualizarDescripcionYCostoDevuelve200YConservaVehiculoEstadoYFecha() throws Exception {
+		Orden orden = guardarOrdenParaActualizar();
+		LocalDateTime fechaAnterior = orden.getFechaIngreso();
+
+		var respuesta = mockMvc.perform(put("/api/ordenes/{id}", orden.getId())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(contenidoActualizacionValido()))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$").isMap())
+				.andExpect(jsonPath("$.id").value(orden.getId().intValue()))
+				.andExpect(jsonPath("$.descripcion").value("Cambio de aceite y filtro"))
+				.andExpect(jsonPath("$.costoFinal").value(45000.75))
+				.andExpect(jsonPath("$.vehiculoId").value(vehiculo.getId().intValue()))
+				.andExpect(jsonPath("$.estado").value("EN_REPARACION"))
+				.andReturn().getResponse();
+
+		var json = jsonMapper.readTree(respuesta.getContentAsString());
+		assertThat(LocalDateTime.parse(json.get("fechaIngreso").stringValue())).isEqualTo(fechaAnterior);
+		assertThat(ordenRepository.count()).isEqualTo(1);
+	}
+
+	@Test
+	void actualizarDescripcionPermiteDejarCostoFinalPendiente() throws Exception {
+		Orden orden = guardarOrden(vehiculo, EstadoOrden.INGRESADO);
+
+		mockMvc.perform(put("/api/ordenes/{id}", orden.getId())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"descripcion\":\"Revisar frenos\"}"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$.id").value(orden.getId().intValue()))
+				.andExpect(jsonPath("$.descripcion").value("Revisar frenos"))
+				.andExpect(jsonPath("$.costoFinal").doesNotExist())
+				.andExpect(jsonPath("$.estado").value("INGRESADO"));
+	}
+
+	@ParameterizedTest
+	@MethodSource("actualizacionesInvalidas")
+	void actualizarConDescripcionInvalidaDevuelve400SinModificarOrden(String contenido) throws Exception {
+		Orden orden = guardarOrdenParaActualizar();
+
+		mockMvc.perform(put("/api/ordenes/{id}", orden.getId())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(contenido))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.title").value("Datos inválidos"))
+				.andExpect(jsonPath("$.detail").value("La petición tiene errores"))
+				.andExpect(jsonPath("$.errores.descripcion").value("La descripción es obligatoria"));
+
+		comprobarOrdenSinCambios(orden.getId());
+	}
+
+	@Test
+	void actualizarOrdenInexistenteDevuelve404SinCrearOtra() throws Exception {
+		long cantidadAnterior = ordenRepository.count();
+
+		mockMvc.perform(put("/api/ordenes/999999")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(contenidoActualizacionValido()))
+				.andExpect(status().isNotFound())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(404))
+				.andExpect(jsonPath("$.title").value("Recurso no encontrado"))
+				.andExpect(jsonPath("$.detail").value("No existe la orden con id 999999"));
+
+		assertThat(ordenRepository.count()).isEqualTo(cantidadAnterior);
+	}
+
+	@Test
+	void actualizarConIdNoNumericoDevuelve400ConProblemDetail() throws Exception {
+		mockMvc.perform(put("/api/ordenes/abc")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(contenidoActualizacionValido()))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.title").value("Parámetro inválido"))
+				.andExpect(jsonPath("$.detail").value("El parámetro id tiene un valor inválido"));
+	}
+
+	@Test
+	void actualizarConCostoNoNumericoDevuelve400SinModificarOrden() throws Exception {
+		Orden orden = guardarOrdenParaActualizar();
+
+		mockMvc.perform(put("/api/ordenes/{id}", orden.getId())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"descripcion\":\"Cambio de aceite\",\"costoFinal\":\"abc\"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.title").value("JSON inválido"))
+				.andExpect(jsonPath("$.detail").value("El JSON enviado no es válido"));
+
+		comprobarOrdenSinCambios(orden.getId());
+	}
+
+	@Test
+	void actualizarConJsonMalFormadoDevuelve400SinModificarOrden() throws Exception {
+		Orden orden = guardarOrdenParaActualizar();
+
+		mockMvc.perform(put("/api/ordenes/{id}", orden.getId())
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"descripcion\":\"Cambio de aceite\""))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.title").value("JSON inválido"))
+				.andExpect(jsonPath("$.detail").value("El JSON enviado no es válido"));
+
+		comprobarOrdenSinCambios(orden.getId());
+	}
+
+	static Stream<String> actualizacionesInvalidas() {
+		return Stream.of(
+				"{\"costoFinal\":45000.75}",
+				"{\"descripcion\":\"\",\"costoFinal\":45000.75}",
+				"{\"descripcion\":null,\"costoFinal\":45000.75}");
+	}
+
 	static Stream<Arguments> ordenesInvalidas() {
 		return Stream.of(
 				Arguments.of("{}", Set.of("vehiculoId", "descripcion")),
@@ -285,6 +410,28 @@ class OrdenControllerTests {
 		orden.setEstado(estado);
 		orden.setFechaIngreso(LocalDateTime.of(2026, 11, 10, 10, 0));
 		return ordenRepository.saveAndFlush(orden);
+	}
+
+	private Orden guardarOrdenParaActualizar() {
+		Orden orden = guardarOrden(vehiculo, EstadoOrden.EN_REPARACION);
+		orden.setCostoFinal(new BigDecimal("10000.50"));
+		return ordenRepository.saveAndFlush(orden);
+	}
+
+	private void comprobarOrdenSinCambios(Long id) {
+		assertThat(ordenRepository.findById(id)).hasValueSatisfying(orden -> {
+			assertThat(orden.getDescripcion()).isEqualTo("Revisión previa");
+			assertThat(orden.getCostoFinal()).isEqualByComparingTo("10000.50");
+			assertThat(orden.getVehiculoId()).isEqualTo(vehiculo.getId());
+			assertThat(orden.getEstado()).isEqualTo(EstadoOrden.EN_REPARACION);
+			assertThat(orden.getFechaIngreso()).isEqualTo(LocalDateTime.of(2026, 11, 10, 10, 0));
+		});
+	}
+
+	private String contenidoActualizacionValido() {
+		return """
+				{"descripcion":"Cambio de aceite y filtro","costoFinal":45000.75}
+				""";
 	}
 
 	private String contenidoValido(Long vehiculoId) {

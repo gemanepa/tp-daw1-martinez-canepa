@@ -1,5 +1,6 @@
 package ar.edu.undec.taller.repository;
 
+import ar.edu.undec.taller.dto.OrdenActualizacionSolicitud;
 import ar.edu.undec.taller.dto.OrdenSolicitud;
 import ar.edu.undec.taller.model.Cliente;
 import ar.edu.undec.taller.model.EstadoOrden;
@@ -7,6 +8,7 @@ import ar.edu.undec.taller.model.Orden;
 import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.service.OrdenService;
 import jakarta.persistence.EntityManager;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -72,6 +74,33 @@ class OrdenPersistenciaTests {
 		assertThat(recuperada.getFechaIngreso()).isBetween(antes, despues);
 		assertThat(recuperada.getVehiculoId()).isEqualTo(vehiculo.getId());
 		assertThat(recuperada.getVehiculo().getPatente()).isEqualTo("ABC123");
+	}
+
+	@Test
+	void actualizarGuardaDescripcionYCostoSinCambiarVehiculoEstadoNiFecha() {
+		LocalDateTime fecha = LocalDateTime.of(2026, 11, 10, 10, 0);
+		Orden orden = new Orden();
+		orden.setVehiculo(vehiculo);
+		orden.setDescripcion("Revisión previa");
+		orden.setEstado(EstadoOrden.EN_REPARACION);
+		orden.setFechaIngreso(fecha);
+		ordenRepository.saveAndFlush(orden);
+		Long id = orden.getId();
+		entityManager.clear();
+
+		ordenService.actualizar(id,
+				new OrdenActualizacionSolicitud("Cambio de aceite y filtro", new BigDecimal("45000.75")));
+		entityManager.flush();
+		entityManager.clear();
+
+		Orden recuperada = ordenRepository.findById(id).orElseThrow();
+		assertThat(recuperada.getId()).isEqualTo(id);
+		assertThat(recuperada.getDescripcion()).isEqualTo("Cambio de aceite y filtro");
+		assertThat(recuperada.getCostoFinal()).isEqualByComparingTo("45000.75");
+		assertThat(recuperada.getVehiculoId()).isEqualTo(vehiculo.getId());
+		assertThat(recuperada.getEstado()).isEqualTo(EstadoOrden.EN_REPARACION);
+		assertThat(recuperada.getFechaIngreso()).isEqualTo(fecha);
+		assertThat(ordenRepository.count()).isEqualTo(1);
 	}
 
 	@ParameterizedTest

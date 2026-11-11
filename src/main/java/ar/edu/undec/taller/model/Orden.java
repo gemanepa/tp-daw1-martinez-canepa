@@ -10,6 +10,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -33,6 +34,8 @@ public class Orden {
 
 	@Column(nullable = false)
 	private LocalDateTime fechaIngreso;
+
+	private BigDecimal costoFinal;
 
 	public Long getId() {
 		return id;
@@ -72,6 +75,14 @@ public class Orden {
 
 	public void setFechaIngreso(LocalDateTime fechaIngreso) {
 		this.fechaIngreso = fechaIngreso;
+	}
+
+	public BigDecimal getCostoFinal() {
+		return costoFinal;
+	}
+
+	public void setCostoFinal(BigDecimal costoFinal) {
+		this.costoFinal = costoFinal;
 	}
 
 }

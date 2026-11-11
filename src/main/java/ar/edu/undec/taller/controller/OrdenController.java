@@ -1,5 +1,6 @@
 package ar.edu.undec.taller.controller;
 
+import ar.edu.undec.taller.dto.OrdenActualizacionSolicitud;
 import ar.edu.undec.taller.dto.OrdenSolicitud;
 import ar.edu.undec.taller.model.EstadoOrden;
 import ar.edu.undec.taller.model.Orden;
@@ -9,7 +10,9 @@ import java.net.URI;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -35,6 +38,11 @@ public class OrdenController {
 		Orden creada = ordenService.crear(solicitud);
 		return ResponseEntity.created(URI.create("/api/ordenes/" + creada.getId()))
 				.body(creada);
+	}
+
+	@PutMapping("/{id}")
+	public Orden actualizar(@PathVariable Long id, @Valid @RequestBody OrdenActualizacionSolicitud solicitud) {
+		return ordenService.actualizar(id, solicitud);
 	}
 
 }

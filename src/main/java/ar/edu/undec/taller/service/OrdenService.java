@@ -1,5 +1,6 @@
 package ar.edu.undec.taller.service;
 
+import ar.edu.undec.taller.dto.OrdenActualizacionSolicitud;
 import ar.edu.undec.taller.dto.OrdenSolicitud;
 import ar.edu.undec.taller.exception.OperacionNoPermitidaException;
 import ar.edu.undec.taller.exception.RecursoNoEncontradoException;
@@ -31,6 +32,12 @@ public class OrdenService {
 		return ordenRepository.findByEstado(estado);
 	}
 
+	public Orden buscarPorId(Long id) {
+		return ordenRepository.findById(id)
+				.orElseThrow(() -> new RecursoNoEncontradoException(
+						"No existe la orden con id " + id));
+	}
+
 	@Transactional
 	public Orden crear(OrdenSolicitud solicitud) {
 		Vehiculo vehiculo = vehiculoRepository.findById(solicitud.vehiculoId())
@@ -47,6 +54,14 @@ public class OrdenService {
 		orden.setDescripcion(solicitud.descripcion());
 		orden.setEstado(EstadoOrden.INGRESADO);
 		orden.setFechaIngreso(LocalDateTime.now());
+		return ordenRepository.save(orden);
+	}
+
+	@Transactional
+	public Orden actualizar(Long id, OrdenActualizacionSolicitud solicitud) {
+		Orden orden = buscarPorId(id);
+		orden.setDescripcion(solicitud.descripcion());
+		orden.setCostoFinal(solicitud.costoFinal());
 		return ordenRepository.save(orden);
 	}
 
