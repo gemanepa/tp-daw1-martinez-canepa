@@ -376,6 +376,62 @@ class OrdenControllerTests {
 		comprobarOrdenSinCambios(orden.getId());
 	}
 
+	@Test
+	void facturacionDevuelve200ConCantidadYTotalDelMesDeEntrega() throws Exception {
+		guardarOrdenFacturacion(EstadoOrden.ENTREGADO, "2026-10-31T23:59:59", "1000.00");
+		guardarOrdenFacturacion(EstadoOrden.ENTREGADO, "2026-11-01T00:00:00", "10000.50");
+		guardarOrdenFacturacion(EstadoOrden.ENTREGADO, "2026-11-30T23:59:59", "45000.75");
+		guardarOrdenFacturacion(EstadoOrden.ENTREGADO, "2026-12-01T00:00:00", "30000.00");
+		guardarOrdenFacturacion(EstadoOrden.CANCELADO, null, "95000.00");
+		guardarOrdenFacturacion(EstadoOrden.EN_REPARACION, null, "99000.00");
+
+		mockMvc.perform(get("/api/ordenes/facturacion").param("mes", "2026-11"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$").isMap())
+				.andExpect(jsonPath("$.cantidadOrdenes").value(2))
+				.andExpect(jsonPath("$.totalFacturado").value(55001.25));
+	}
+
+	@Test
+	void facturacionSinEntregasEnElMesDevuelve200ConCantidadYTotalEnCero() throws Exception {
+		guardarOrdenFacturacion(EstadoOrden.ENTREGADO, "2026-10-31T23:59:59", "1000.00");
+
+		mockMvc.perform(get("/api/ordenes/facturacion").param("mes", "2026-11"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$.cantidadOrdenes").value(0))
+				.andExpect(jsonPath("$.totalFacturado").value(0));
+	}
+
+	@Test
+	void facturacionConMesInvalidoDevuelve400ConProblemDetail() throws Exception {
+		mockMvc.perform(get("/api/ordenes/facturacion").param("mes", "2026-13"))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.title").value("Parámetro inválido"))
+				.andExpect(jsonPath("$.detail").value("El parámetro mes tiene un valor inválido"));
+	}
+
+	@Test
+	void facturacionSinMesDevuelve400ConProblemDetail() throws Exception {
+		mockMvc.perform(get("/api/ordenes/facturacion"))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.title").value("Parámetro obligatorio"))
+				.andExpect(jsonPath("$.detail").value("El parámetro mes es obligatorio"));
+	}
+
+	private void guardarOrdenFacturacion(EstadoOrden estado, String fechaEntrega, String costoFinal) {
+		Orden orden = guardarOrden(vehiculo, estado);
+		orden.setFechaIngreso(LocalDateTime.of(2026, 10, 1, 10, 0));
+		orden.setFechaEntrega(fechaEntrega == null ? null : LocalDateTime.parse(fechaEntrega));
+		orden.setCostoFinal(new BigDecimal(costoFinal));
+		ordenRepository.saveAndFlush(orden);
+	}
+
 	static Stream<String> actualizacionesInvalidas() {
 		return Stream.of(
 				"{\"costoFinal\":45000.75}",

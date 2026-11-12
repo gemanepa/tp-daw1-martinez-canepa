@@ -1,6 +1,7 @@
 package ar.edu.undec.taller.controller;
 
 import ar.edu.undec.taller.dto.ConsumoRepuestoSolicitud;
+import ar.edu.undec.taller.dto.FacturacionMensual;
 import ar.edu.undec.taller.dto.OrdenActualizacionSolicitud;
 import ar.edu.undec.taller.dto.OrdenEstadoSolicitud;
 import ar.edu.undec.taller.dto.OrdenSolicitud;
@@ -11,7 +12,9 @@ import ar.edu.undec.taller.service.ConsumoRepuestoService;
 import ar.edu.undec.taller.service.OrdenService;
 import jakarta.validation.Valid;
 import java.net.URI;
+import java.time.YearMonth;
 import java.util.List;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -38,6 +41,12 @@ public class OrdenController {
 	@GetMapping
 	public List<Orden> listar(@RequestParam(required = false) EstadoOrden estado) {
 		return ordenService.listar(estado);
+	}
+
+	@GetMapping("/facturacion")
+	public FacturacionMensual facturacion(
+			@RequestParam @DateTimeFormat(pattern = "uuuu-MM") YearMonth mes) {
+		return ordenService.facturacion(mes);
 	}
 
 	@PostMapping

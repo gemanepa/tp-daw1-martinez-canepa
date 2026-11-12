@@ -1,5 +1,6 @@
 package ar.edu.undec.taller.service;
 
+import ar.edu.undec.taller.dto.FacturacionMensual;
 import ar.edu.undec.taller.dto.OrdenActualizacionSolicitud;
 import ar.edu.undec.taller.dto.OrdenSolicitud;
 import ar.edu.undec.taller.exception.CostoFinalInvalidoException;
@@ -12,6 +13,7 @@ import ar.edu.undec.taller.repository.OrdenRepository;
 import ar.edu.undec.taller.repository.VehiculoRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +40,19 @@ public class OrdenService {
 		return ordenRepository.findById(id)
 				.orElseThrow(() -> new RecursoNoEncontradoException(
 						"No existe la orden con id " + id));
+	}
+
+	public FacturacionMensual facturacion(YearMonth mes) {
+		LocalDateTime desde = mes.atDay(1).atStartOfDay();
+		LocalDateTime hasta = mes.plusMonths(1).atDay(1).atStartOfDay();
+		List<Orden> entregadas = ordenRepository
+				.findByEstadoAndFechaEntregaGreaterThanEqualAndFechaEntregaLessThan(
+						EstadoOrden.ENTREGADO, desde, hasta);
+		BigDecimal total = BigDecimal.ZERO;
+		for (Orden orden : entregadas) {
+			total = total.add(orden.getCostoFinal());
+		}
+		return new FacturacionMensual(entregadas.size(), total);
 	}
 
 	@Transactional

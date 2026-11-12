@@ -11,6 +11,7 @@ import ar.edu.undec.taller.service.OrdenService;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -247,6 +248,44 @@ class OrdenPersistenciaTests {
 
 		assertThat(ordenRepository.existsByVehiculo_IdAndEstadoNotIn(vehiculo.getId(),
 				List.of(EstadoOrden.ENTREGADO, EstadoOrden.CANCELADO))).isEqualTo(abierta);
+	}
+
+	@Test
+	void facturacionUsaElMesDeEntregaYExcluyeOtrosMesesYEstados() {
+		guardarOrdenFacturacion(EstadoOrden.ENTREGADO, "2026-10-31T23:59:59", "1000.00");
+		guardarOrdenFacturacion(EstadoOrden.ENTREGADO, "2026-11-01T00:00:00", "10000.50");
+		guardarOrdenFacturacion(EstadoOrden.ENTREGADO, "2026-11-30T23:59:59", "45000.75");
+		guardarOrdenFacturacion(EstadoOrden.ENTREGADO, "2026-12-01T00:00:00", "30000.00");
+		guardarOrdenFacturacion(EstadoOrden.CANCELADO, null, "95000.00");
+		guardarOrdenFacturacion(EstadoOrden.TERMINADO, null, "99000.00");
+		entityManager.clear();
+
+		var facturacion = ordenService.facturacion(YearMonth.of(2026, 11));
+
+		assertThat(facturacion.cantidadOrdenes()).isEqualTo(2);
+		assertThat(facturacion.totalFacturado()).isEqualByComparingTo("55001.25");
+	}
+
+	@Test
+	void facturacionDeMesSinEntregasDevuelveCeroAunqueExistanEnOtroMes() {
+		guardarOrdenFacturacion(EstadoOrden.ENTREGADO, "2026-10-31T23:59:59", "1000.00");
+		entityManager.clear();
+
+		var facturacion = ordenService.facturacion(YearMonth.of(2026, 11));
+
+		assertThat(facturacion.cantidadOrdenes()).isZero();
+		assertThat(facturacion.totalFacturado()).isEqualByComparingTo(BigDecimal.ZERO);
+	}
+
+	private void guardarOrdenFacturacion(EstadoOrden estado, String fechaEntrega, String costoFinal) {
+		Orden orden = new Orden();
+		orden.setVehiculo(vehiculo);
+		orden.setDescripcion("Revisión previa");
+		orden.setEstado(estado);
+		orden.setFechaIngreso(LocalDateTime.of(2026, 10, 1, 10, 0));
+		orden.setFechaEntrega(fechaEntrega == null ? null : LocalDateTime.parse(fechaEntrega));
+		orden.setCostoFinal(new BigDecimal(costoFinal));
+		ordenRepository.saveAndFlush(orden);
 	}
 
 	private Orden recargarOrden(Long id) {

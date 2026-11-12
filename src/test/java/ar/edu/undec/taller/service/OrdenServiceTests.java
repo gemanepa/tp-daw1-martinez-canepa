@@ -14,6 +14,7 @@ import ar.edu.undec.taller.repository.OrdenRepository;
 import ar.edu.undec.taller.repository.VehiculoRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -168,6 +169,34 @@ class OrdenServiceTests {
 				.hasMessage("El costo final no puede ser menor que el costo de repuestos");
 		assertThat(orden).usingRecursiveComparison().isEqualTo(anterior);
 		verify(ordenRepository, never()).save(any(Orden.class));
+	}
+
+	@Test
+	void facturacionCuentaEntregasYSumaCostosFinalesConCentavos() {
+		Orden primera = ordenEnEstado(EstadoOrden.ENTREGADO);
+		primera.setCostoFinal(new BigDecimal("10000.50"));
+		Orden segunda = ordenEnEstado(EstadoOrden.ENTREGADO);
+		segunda.setCostoFinal(new BigDecimal("45000.75"));
+		when(ordenRepository.findByEstadoAndFechaEntregaGreaterThanEqualAndFechaEntregaLessThan(
+				EstadoOrden.ENTREGADO, LocalDateTime.of(2026, 11, 1, 0, 0),
+				LocalDateTime.of(2026, 12, 1, 0, 0))).thenReturn(List.of(primera, segunda));
+
+		var facturacion = ordenService.facturacion(YearMonth.of(2026, 11));
+
+		assertThat(facturacion.cantidadOrdenes()).isEqualTo(2);
+		assertThat(facturacion.totalFacturado()).isEqualByComparingTo("55001.25");
+	}
+
+	@Test
+	void facturacionSinEntregasDevuelveCantidadYTotalEnCero() {
+		when(ordenRepository.findByEstadoAndFechaEntregaGreaterThanEqualAndFechaEntregaLessThan(
+				EstadoOrden.ENTREGADO, LocalDateTime.of(2026, 11, 1, 0, 0),
+				LocalDateTime.of(2026, 12, 1, 0, 0))).thenReturn(List.of());
+
+		var facturacion = ordenService.facturacion(YearMonth.of(2026, 11));
+
+		assertThat(facturacion.cantidadOrdenes()).isZero();
+		assertThat(facturacion.totalFacturado()).isEqualByComparingTo(BigDecimal.ZERO);
 	}
 
 	private Orden ordenConConsumos() {

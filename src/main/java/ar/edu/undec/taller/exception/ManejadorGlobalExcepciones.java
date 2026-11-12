@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -65,6 +66,14 @@ public class ManejadorGlobalExcepciones {
 				HttpStatus.BAD_REQUEST,
 				"El parámetro " + excepcion.getName() + " tiene un valor inválido");
 		problema.setTitle("Parámetro inválido");
+		return problema;
+	}
+
+	@ExceptionHandler(MissingServletRequestParameterException.class)
+	public ProblemDetail parametroAusente(MissingServletRequestParameterException excepcion) {
+		ProblemDetail problema = ProblemDetail.forStatusAndDetail(
+				HttpStatus.BAD_REQUEST, "El parámetro " + excepcion.getParameterName() + " es obligatorio");
+		problema.setTitle("Parámetro obligatorio");
 		return problema;
 	}
 
