@@ -1,6 +1,7 @@
 package ar.edu.undec.taller.controller;
 
 import ar.edu.undec.taller.dto.VehiculoSolicitud;
+import ar.edu.undec.taller.model.Orden;
 import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.service.VehiculoService;
 import jakarta.validation.Valid;
@@ -34,6 +35,11 @@ public class VehiculoController {
 	@GetMapping("/{id}")
 	public Vehiculo obtener(@PathVariable Long id) {
 		return vehiculoService.buscarPorId(id);
+	}
+
+	@GetMapping("/patente/{patente}/historial")
+	public List<Orden> historial(@PathVariable String patente) {
+		return vehiculoService.historial(patente);
 	}
 
 	@PostMapping

@@ -9,6 +9,8 @@ public interface OrdenRepository extends JpaRepository<Orden, Long> {
 
 	List<Orden> findByEstado(EstadoOrden estado);
 
+	List<Orden> findByVehiculo_PatenteOrderByFechaIngresoDesc(String patente);
+
 	boolean existsByVehiculo_Id(Long vehiculoId);
 
 	boolean existsByVehiculo_IdAndEstadoNotIn(Long vehiculoId, List<EstadoOrden> estados);

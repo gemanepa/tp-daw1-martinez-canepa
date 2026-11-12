@@ -4,6 +4,7 @@ import ar.edu.undec.taller.dto.VehiculoSolicitud;
 import ar.edu.undec.taller.exception.OperacionNoPermitidaException;
 import ar.edu.undec.taller.exception.RecursoNoEncontradoException;
 import ar.edu.undec.taller.model.Cliente;
+import ar.edu.undec.taller.model.Orden;
 import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.repository.ClienteRepository;
 import ar.edu.undec.taller.repository.OrdenRepository;
@@ -28,6 +29,10 @@ public class VehiculoService {
 
 	public List<Vehiculo> listar() {
 		return vehiculoRepository.findAll();
+	}
+
+	public List<Orden> historial(String patente) {
+		return ordenRepository.findByVehiculo_PatenteOrderByFechaIngresoDesc(patente);
 	}
 
 	public Vehiculo buscarPorId(Long id) {

@@ -412,6 +412,58 @@ class VehiculoControllerTests {
 		});
 	}
 
+	@Test
+	void historialDevuelve200ConTodasLasOrdenesDelVehiculoDeMasNuevaAMasVieja() throws Exception {
+		Vehiculo vehiculo = guardarVehiculo("ABC123", "Fiat", "Cronos", cliente);
+		Vehiculo otro = guardarVehiculo("AB123CD", "VW", "Gol", cliente);
+		LocalDateTime fecha = LocalDateTime.of(2026, 11, 10, 9, 0);
+		Orden reciente = guardarOrden(vehiculo, EstadoOrden.EN_REPARACION, fecha.plusDays(2));
+		Orden antigua = guardarOrden(vehiculo, EstadoOrden.CANCELADO, fecha);
+		Orden intermedia = guardarOrden(vehiculo, EstadoOrden.ENTREGADO, fecha.plusDays(1));
+		guardarOrden(otro, EstadoOrden.INGRESADO, fecha.plusDays(3));
+
+		mockMvc.perform(get("/api/vehiculos/patente/{patente}/historial", "ABC123"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$").isArray())
+				.andExpect(jsonPath("$.length()").value(3))
+				.andExpect(jsonPath("$[0].id").value(reciente.getId().intValue()))
+				.andExpect(jsonPath("$[0].vehiculoId").value(vehiculo.getId().intValue()))
+				.andExpect(jsonPath("$[0].descripcion").value("Revisión del vehículo"))
+				.andExpect(jsonPath("$[0].estado").value("EN_REPARACION"))
+				.andExpect(jsonPath("$[0].fechaIngreso").value("2026-11-12T09:00:00"))
+				.andExpect(jsonPath("$[1].id").value(intermedia.getId().intValue()))
+				.andExpect(jsonPath("$[1].vehiculoId").value(vehiculo.getId().intValue()))
+				.andExpect(jsonPath("$[1].estado").value("ENTREGADO"))
+				.andExpect(jsonPath("$[1].fechaIngreso").value("2026-11-11T09:00:00"))
+				.andExpect(jsonPath("$[2].id").value(antigua.getId().intValue()))
+				.andExpect(jsonPath("$[2].vehiculoId").value(vehiculo.getId().intValue()))
+				.andExpect(jsonPath("$[2].estado").value("CANCELADO"))
+				.andExpect(jsonPath("$[2].fechaIngreso").value("2026-11-10T09:00:00"));
+	}
+
+	@Test
+	void historialDeVehiculoSinOrdenesDevuelve200YArrayVacio() throws Exception {
+		guardarVehiculo("ABC123", "Fiat", "Cronos", cliente);
+		Vehiculo otro = guardarVehiculo("AB123CD", "VW", "Gol", cliente);
+		guardarOrden(otro, EstadoOrden.INGRESADO, LocalDateTime.of(2026, 11, 10, 9, 0));
+
+		mockMvc.perform(get("/api/vehiculos/patente/{patente}/historial", "ABC123"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$").isArray())
+				.andExpect(jsonPath("$").isEmpty());
+	}
+
+	private Orden guardarOrden(Vehiculo vehiculo, EstadoOrden estado, LocalDateTime fechaIngreso) {
+		Orden orden = new Orden();
+		orden.setVehiculo(vehiculo);
+		orden.setDescripcion("Revisión del vehículo");
+		orden.setEstado(estado);
+		orden.setFechaIngreso(fechaIngreso);
+		return ordenRepository.saveAndFlush(orden);
+	}
+
 	static Stream<Arguments> vehiculosInvalidos() {
 		return Stream.of(
 				Arguments.of("{\"patente\":\"123\",\"marca\":\"\",\"modelo\":\"\",\"clienteId\":null}",

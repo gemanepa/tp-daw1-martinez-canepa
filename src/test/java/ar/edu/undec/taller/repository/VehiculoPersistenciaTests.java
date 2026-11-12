@@ -132,6 +132,50 @@ class VehiculoPersistenciaTests {
 		assertThat(conservada.getVehiculoId()).isEqualTo(vehiculo.getId());
 	}
 
+	@Test
+	void historialFiltraPorPatenteYOrdenaPorFechaDeIngresoDescendente() {
+		Cliente cliente = guardarCliente("Ana Díaz");
+		Vehiculo vehiculo = nuevoVehiculo(cliente);
+		vehiculo.setPatente("AB123CD");
+		vehiculoRepository.saveAndFlush(vehiculo);
+		Vehiculo otro = vehiculoRepository.saveAndFlush(nuevoVehiculo(cliente));
+		LocalDateTime fecha = LocalDateTime.of(2026, 11, 10, 9, 0);
+		Orden reciente = guardarOrden(vehiculo, EstadoOrden.TERMINADO, fecha.plusDays(2));
+		Orden antigua = guardarOrden(vehiculo, EstadoOrden.CANCELADO, fecha);
+		Orden intermedia = guardarOrden(vehiculo, EstadoOrden.ENTREGADO, fecha.plusDays(1));
+		guardarOrden(otro, EstadoOrden.INGRESADO, fecha.plusDays(3));
+		entityManager.clear();
+
+		var historial = vehiculoService.historial("AB123CD");
+
+		assertThat(historial).extracting(Orden::getId)
+				.containsExactly(reciente.getId(), intermedia.getId(), antigua.getId());
+		assertThat(historial).allSatisfy(orden ->
+				assertThat(orden.getVehiculoId()).isEqualTo(vehiculo.getId()));
+	}
+
+	@Test
+	void historialDeVehiculoSinOrdenesDevuelveListaVaciaAunqueOtroTengaOrdenes() {
+		Cliente cliente = guardarCliente("Ana Díaz");
+		vehiculoRepository.saveAndFlush(nuevoVehiculo(cliente));
+		Vehiculo otro = nuevoVehiculo(cliente);
+		otro.setPatente("AB123CD");
+		vehiculoRepository.saveAndFlush(otro);
+		guardarOrden(otro, EstadoOrden.INGRESADO, LocalDateTime.of(2026, 11, 10, 9, 0));
+		entityManager.clear();
+
+		assertThat(vehiculoService.historial("ABC123")).isEmpty();
+	}
+
+	private Orden guardarOrden(Vehiculo vehiculo, EstadoOrden estado, LocalDateTime fechaIngreso) {
+		Orden orden = new Orden();
+		orden.setVehiculo(vehiculo);
+		orden.setDescripcion("Revisión del vehículo");
+		orden.setEstado(estado);
+		orden.setFechaIngreso(fechaIngreso);
+		return ordenRepository.saveAndFlush(orden);
+	}
+
 	private Cliente guardarCliente(String nombre) {
 		Cliente cliente = new Cliente();
 		cliente.setNombre(nombre);
