@@ -7,6 +7,7 @@ import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.repository.ClienteRepository;
 import ar.edu.undec.taller.repository.OrdenRepository;
 import ar.edu.undec.taller.repository.VehiculoRepository;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -41,16 +44,19 @@ class OrdenEstadoControllerTests {
 	private final VehiculoRepository vehiculoRepository;
 	private final ClienteRepository clienteRepository;
 	private final JsonMapper jsonMapper;
+	private final EntityManager entityManager;
 	private Vehiculo vehiculo;
 
 	@Autowired
 	OrdenEstadoControllerTests(MockMvc mockMvc, OrdenRepository ordenRepository,
-			VehiculoRepository vehiculoRepository, ClienteRepository clienteRepository, JsonMapper jsonMapper) {
+			VehiculoRepository vehiculoRepository, ClienteRepository clienteRepository, JsonMapper jsonMapper,
+			EntityManager entityManager) {
 		this.mockMvc = mockMvc;
 		this.ordenRepository = ordenRepository;
 		this.vehiculoRepository = vehiculoRepository;
 		this.clienteRepository = clienteRepository;
 		this.jsonMapper = jsonMapper;
+		this.entityManager = entityManager;
 	}
 
 	@BeforeEach
@@ -95,6 +101,13 @@ class OrdenEstadoControllerTests {
 				.andReturn().getResponse();
 
 		var actual = jsonMapper.readTree(respuesta.getContentAsString());
+		if (destino == EstadoOrden.TERMINADO) {
+			assertThat(actual.get("horasEnReparacion").doubleValue()).isGreaterThanOrEqualTo(0);
+		} else if (destino == EstadoOrden.ENTREGADO) {
+			assertThat(actual.get("horasEnReparacion")).isEqualTo(anterior.get("horasEnReparacion"));
+		} else {
+			assertThat(actual.get("horasEnReparacion")).isNull();
+		}
 		assertThat(LocalDateTime.parse(actual.get(campoFecha).stringValue()))
 				.isBetween(antesDelCambio, LocalDateTime.now());
 		for (String campo : List.of("fechaIngreso", "fechaInicioReparacion", "fechaTerminacion",
@@ -234,6 +247,50 @@ class OrdenEstadoControllerTests {
 				.andExpect(jsonPath("$.detail").value("El JSON enviado no es válido"));
 
 		comprobarSinCambios(orden.getId(), anterior);
+	}
+
+	@Test
+	void devolverHorasDeOrdenTerminadaYConservarlasAlEntregar() throws Exception {
+		Orden orden = guardarOrden(EstadoOrden.TERMINADO);
+		orden.setFechaInicioReparacion(LocalDateTime.of(2026, 11, 10, 11, 15));
+		orden.setFechaTerminacion(LocalDateTime.of(2026, 11, 10, 13, 45));
+		ordenRepository.saveAndFlush(orden);
+		Long id = orden.getId();
+		entityManager.clear();
+
+		mockMvc.perform(get("/api/ordenes").param("estado", "TERMINADO"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$[0].id").value(id.intValue()))
+				.andExpect(jsonPath("$[0].horasEnReparacion").value(2.5));
+
+		mockMvc.perform(patch("/api/ordenes/{id}/estado", id)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"estado\":\"ENTREGADO\"}"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$.estado").value("ENTREGADO"))
+				.andExpect(jsonPath("$.horasEnReparacion").value(2.5))
+				.andExpect(jsonPath("$.fechaInicioReparacion").value("2026-11-10T11:15:00"))
+				.andExpect(jsonPath("$.fechaTerminacion").value("2026-11-10T13:45:00"));
+		entityManager.flush();
+		entityManager.clear();
+
+		mockMvc.perform(get("/api/vehiculos/patente/{patente}/historial", "ABC123"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].estado").value("ENTREGADO"))
+				.andExpect(jsonPath("$[0].horasEnReparacion").value(2.5));
+	}
+
+	@ParameterizedTest
+	@EnumSource(value = EstadoOrden.class, names = {"INGRESADO", "EN_REPARACION", "CANCELADO"})
+	void noDevolverHorasEnOrdenesQueNoTerminaronLaReparacion(EstadoOrden estado) throws Exception {
+		guardarOrden(estado);
+
+		mockMvc.perform(get("/api/ordenes"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].estado").value(estado.name()))
+				.andExpect(jsonPath("$[0].horasEnReparacion").doesNotExist());
 	}
 
 	private Orden guardarOrden(EstadoOrden estado) {

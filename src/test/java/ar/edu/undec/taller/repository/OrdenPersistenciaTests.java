@@ -277,6 +277,33 @@ class OrdenPersistenciaTests {
 		assertThat(facturacion.totalFacturado()).isEqualByComparingTo(BigDecimal.ZERO);
 	}
 
+	@Test
+	void calcularHorasConFechasPersistidasYConservarlasAlEntregar() {
+		LocalDateTime inicio = LocalDateTime.of(2026, 11, 10, 10, 15);
+		LocalDateTime terminacion = LocalDateTime.of(2026, 11, 10, 12, 45);
+		Orden orden = new Orden();
+		orden.setVehiculo(vehiculo);
+		orden.setDescripcion("Reparación completa");
+		orden.setEstado(EstadoOrden.TERMINADO);
+		orden.setFechaIngreso(inicio.minusDays(1));
+		orden.setFechaInicioReparacion(inicio);
+		orden.setFechaTerminacion(terminacion);
+		orden.setCostoFinal(new BigDecimal("45000.75"));
+		ordenRepository.saveAndFlush(orden);
+		Long id = orden.getId();
+
+		Orden terminada = recargarOrden(id);
+		assertThat(terminada.getHorasEnReparacion()).isEqualTo(2.5);
+
+		ordenService.cambiarEstado(id, EstadoOrden.ENTREGADO);
+		Orden entregada = recargarOrden(id);
+		assertThat(entregada.getEstado()).isEqualTo(EstadoOrden.ENTREGADO);
+		assertThat(entregada.getFechaEntrega()).isNotNull();
+		assertThat(entregada.getFechaInicioReparacion()).isEqualTo(inicio);
+		assertThat(entregada.getFechaTerminacion()).isEqualTo(terminacion);
+		assertThat(entregada.getHorasEnReparacion()).isEqualTo(2.5);
+	}
+
 	private void guardarOrdenFacturacion(EstadoOrden estado, String fechaEntrega, String costoFinal) {
 		Orden orden = new Orden();
 		orden.setVehiculo(vehiculo);

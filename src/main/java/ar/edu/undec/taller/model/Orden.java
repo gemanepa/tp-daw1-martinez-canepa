@@ -13,6 +13,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -129,6 +130,14 @@ public class Orden {
 
 	public void setFechaTerminacion(LocalDateTime fechaTerminacion) {
 		this.fechaTerminacion = fechaTerminacion;
+	}
+
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public Double getHorasEnReparacion() {
+		if (fechaInicioReparacion == null || fechaTerminacion == null) {
+			return null;
+		}
+		return Duration.between(fechaInicioReparacion, fechaTerminacion).toSeconds() / 3600.0;
 	}
 
 	public LocalDateTime getFechaEntrega() {
