@@ -1,25 +1,32 @@
 package ar.edu.undec.taller.repository;
 
 import ar.edu.undec.taller.dto.ConsumoRepuestoSolicitud;
+import ar.edu.undec.taller.dto.OrdenActualizacionSolicitud;
 import ar.edu.undec.taller.dto.OrdenSolicitud;
+import ar.edu.undec.taller.exception.CostoFinalInvalidoException;
 import ar.edu.undec.taller.exception.OperacionNoPermitidaException;
 import ar.edu.undec.taller.model.Cliente;
 import ar.edu.undec.taller.model.ConsumoRepuesto;
+import ar.edu.undec.taller.model.Orden;
 import ar.edu.undec.taller.model.Repuesto;
 import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.service.ConsumoRepuestoService;
 import ar.edu.undec.taller.service.OrdenService;
 import ar.edu.undec.taller.service.RepuestoService;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -37,6 +44,7 @@ class ConsumoRepuestoPersistenciaTests {
 	private final ConsumoRepuestoService consumoRepuestoService;
 	private final RepuestoRepository repuestoRepository;
 	private final JdbcTemplate jdbcTemplate;
+	private final EntityManager entityManager;
 	private Long clienteId;
 	private Long vehiculoId;
 	private Long ordenId;
@@ -49,7 +57,7 @@ class ConsumoRepuestoPersistenciaTests {
 	ConsumoRepuestoPersistenciaTests(ClienteRepository clienteRepository,
 			VehiculoRepository vehiculoRepository, OrdenService ordenService, RepuestoService repuestoService,
 			ConsumoRepuestoService consumoRepuestoService, RepuestoRepository repuestoRepository,
-			JdbcTemplate jdbcTemplate) {
+			JdbcTemplate jdbcTemplate, EntityManager entityManager) {
 		this.clienteRepository = clienteRepository;
 		this.vehiculoRepository = vehiculoRepository;
 		this.ordenService = ordenService;
@@ -57,6 +65,7 @@ class ConsumoRepuestoPersistenciaTests {
 		this.consumoRepuestoService = consumoRepuestoService;
 		this.repuestoRepository = repuestoRepository;
 		this.jdbcTemplate = jdbcTemplate;
+		this.entityManager = entityManager;
 	}
 
 	@BeforeEach
@@ -134,6 +143,68 @@ class ConsumoRepuestoPersistenciaTests {
 
 		assertThat(consumoRepuestoRepository.count()).isEqualTo(cantidadAnterior);
 		assertThat(repuestoRepository.findById(repuestoId).orElseThrow().getStock()).isEqualTo(10);
+	}
+
+	@Test
+	@Transactional
+	void calcularCostoDesdeLosConsumosPersistidosIncluyeConsumosDelMismoRepuesto() {
+		registrarDosConsumos();
+		assertThat(ordenService.buscarPorId(ordenId).getCostoRepuestos()).isEqualByComparingTo("42503.75");
+		entityManager.flush();
+		entityManager.clear();
+
+		Orden recuperada = ordenService.buscarPorId(ordenId);
+		assertThat(recuperada.getConsumos()).hasSize(2);
+		assertThat(recuperada.getCostoRepuestos()).isEqualByComparingTo("42503.75");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"42503.75", "45000.75"})
+	@Transactional
+	void actualizarPersisteUnCostoFinalSuficiente(String costoFinal) {
+		registrarDosConsumos();
+		entityManager.flush();
+		entityManager.clear();
+
+		ordenService.actualizar(ordenId,
+				new OrdenActualizacionSolicitud("Reparación completa", new BigDecimal(costoFinal)));
+		entityManager.flush();
+		entityManager.clear();
+
+		Orden recuperada = ordenService.buscarPorId(ordenId);
+		assertThat(recuperada.getDescripcion()).isEqualTo("Reparación completa");
+		assertThat(recuperada.getCostoFinal()).isEqualByComparingTo(costoFinal);
+		assertThat(recuperada.getCostoRepuestos()).isEqualByComparingTo("42503.75");
+	}
+
+	@Test
+	@Transactional
+	void costoFinalInferiorConservaLaOrdenLosConsumosYElStockPersistidos() {
+		ordenService.actualizar(ordenId,
+				new OrdenActualizacionSolicitud("Trabajo anterior", new BigDecimal("45000.75")));
+		registrarDosConsumos();
+		entityManager.flush();
+		entityManager.clear();
+
+		assertThatThrownBy(() -> ordenService.actualizar(ordenId,
+				new OrdenActualizacionSolicitud("Cambio rechazado", new BigDecimal("42503.74"))))
+				.isInstanceOf(CostoFinalInvalidoException.class);
+		entityManager.flush();
+		entityManager.clear();
+
+		Orden recuperada = ordenService.buscarPorId(ordenId);
+		assertThat(recuperada.getDescripcion()).isEqualTo("Trabajo anterior");
+		assertThat(recuperada.getCostoFinal()).isEqualByComparingTo("45000.75");
+		assertThat(recuperada.getCostoRepuestos()).isEqualByComparingTo("42503.75");
+		assertThat(recuperada.getConsumos()).hasSize(2);
+		assertThat(repuestoRepository.findById(repuestoId).orElseThrow().getStock()).isEqualTo(5);
+	}
+
+	private void registrarDosConsumos() {
+		entityManager.flush();
+		entityManager.clear();
+		consumoRepuestoService.registrar(ordenId, new ConsumoRepuestoSolicitud(repuestoId, 2));
+		consumoRepuestoService.registrar(ordenId, new ConsumoRepuestoSolicitud(repuestoId, 3));
 	}
 
 }

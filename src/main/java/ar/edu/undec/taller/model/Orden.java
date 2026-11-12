@@ -1,6 +1,7 @@
 package ar.edu.undec.taller.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -10,8 +11,11 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 public class Orden {
@@ -36,6 +40,10 @@ public class Orden {
 	private LocalDateTime fechaIngreso;
 
 	private BigDecimal costoFinal;
+
+	@JsonIgnore
+	@OneToMany(mappedBy = "orden")
+	private List<ConsumoRepuesto> consumos = new ArrayList<>();
 
 	private LocalDateTime fechaInicioReparacion;
 	private LocalDateTime fechaTerminacion;
@@ -88,6 +96,23 @@ public class Orden {
 
 	public void setCostoFinal(BigDecimal costoFinal) {
 		this.costoFinal = costoFinal;
+	}
+
+	public List<ConsumoRepuesto> getConsumos() {
+		return consumos;
+	}
+
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public BigDecimal getCostoRepuestos() {
+		if (consumos.isEmpty()) {
+			return null;
+		}
+		BigDecimal total = BigDecimal.ZERO;
+		for (ConsumoRepuesto consumo : consumos) {
+			total = total.add(consumo.getRepuesto().getPrecio()
+					.multiply(BigDecimal.valueOf(consumo.getCantidad())));
+		}
+		return total;
 	}
 
 	public LocalDateTime getFechaInicioReparacion() {

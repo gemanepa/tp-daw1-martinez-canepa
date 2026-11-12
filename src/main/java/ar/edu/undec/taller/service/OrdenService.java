@@ -2,6 +2,7 @@ package ar.edu.undec.taller.service;
 
 import ar.edu.undec.taller.dto.OrdenActualizacionSolicitud;
 import ar.edu.undec.taller.dto.OrdenSolicitud;
+import ar.edu.undec.taller.exception.CostoFinalInvalidoException;
 import ar.edu.undec.taller.exception.OperacionNoPermitidaException;
 import ar.edu.undec.taller.exception.RecursoNoEncontradoException;
 import ar.edu.undec.taller.model.EstadoOrden;
@@ -9,6 +10,7 @@ import ar.edu.undec.taller.model.Orden;
 import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.repository.OrdenRepository;
 import ar.edu.undec.taller.repository.VehiculoRepository;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -60,6 +62,11 @@ public class OrdenService {
 	@Transactional
 	public Orden actualizar(Long id, OrdenActualizacionSolicitud solicitud) {
 		Orden orden = buscarPorId(id);
+		BigDecimal costoRepuestos = orden.getCostoRepuestos();
+		if (costoRepuestos != null && solicitud.costoFinal() != null
+				&& solicitud.costoFinal().compareTo(costoRepuestos) < 0) {
+			throw new CostoFinalInvalidoException();
+		}
 		orden.setDescripcion(solicitud.descripcion());
 		orden.setCostoFinal(solicitud.costoFinal());
 		return ordenRepository.save(orden);

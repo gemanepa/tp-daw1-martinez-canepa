@@ -1,5 +1,6 @@
 package ar.edu.undec.taller.controller;
 
+import ar.edu.undec.taller.model.Orden;
 import ar.edu.undec.taller.repository.ConsumoRepuestoRepository;
 import ar.edu.undec.taller.repository.RepuestoRepository;
 import jakarta.persistence.EntityManager;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -21,7 +23,10 @@ import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -177,6 +182,98 @@ class ConsumoRepuestoControllerTests {
 				.andExpect(jsonPath("$.detail").value("El JSON enviado no es válido"));
 
 		comprobarSinCambios();
+	}
+
+	@Test
+	void mostrarCostoCalculadoConVariosRepuestosEnListadosYCambioDeEstado() throws Exception {
+		mockMvc.perform(get("/api/ordenes"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].costoRepuestos").doesNotExist());
+
+		cargarVariosConsumos();
+		entityManager.flush();
+		entityManager.clear();
+
+		for (String ruta : new String[]{"/api/ordenes", "/api/ordenes?estado=INGRESADO"}) {
+			mockMvc.perform(get(ruta))
+					.andExpect(status().isOk())
+					.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+					.andExpect(jsonPath("$.length()").value(1))
+					.andExpect(jsonPath("$[0].id").value((int) ordenId))
+					.andExpect(jsonPath("$[0].costoRepuestos").value(29753.0))
+					.andExpect(jsonPath("$[0].consumos").doesNotExist());
+		}
+
+		mockMvc.perform(patch("/api/ordenes/{id}/estado", ordenId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"estado\":\"EN_REPARACION\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.estado").value("EN_REPARACION"))
+				.andExpect(jsonPath("$.costoRepuestos").value(29753.0));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"29753.00", "35000.50"})
+	void actualizarConCostoSuficienteDevuelve200YCostoCalculado(String costoFinal) throws Exception {
+		cargarVariosConsumos();
+
+		mockMvc.perform(put("/api/ordenes/{id}", ordenId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"descripcion\":\"Reparación completa\",\"costoFinal\":%s}".formatted(costoFinal)))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$.id").value((int) ordenId))
+				.andExpect(jsonPath("$.descripcion").value("Reparación completa"))
+				.andExpect(jsonPath("$.costoFinal").value(Double.parseDouble(costoFinal)))
+				.andExpect(jsonPath("$.costoRepuestos").value(29753.0));
+
+		entityManager.flush();
+		entityManager.clear();
+		Orden recuperada = entityManager.find(Orden.class, ordenId);
+		assertThat(recuperada.getDescripcion()).isEqualTo("Reparación completa");
+		assertThat(recuperada.getCostoFinal()).isEqualByComparingTo(costoFinal);
+		assertThat(recuperada.getCostoRepuestos()).isEqualByComparingTo("29753.00");
+	}
+
+	@Test
+	void costoFinalInferiorDevuelve400ConProblemDetailSinGuardarCambios() throws Exception {
+		mockMvc.perform(put("/api/ordenes/{id}", ordenId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"descripcion\":\"Trabajo anterior\",\"costoFinal\":45000.75}"))
+				.andExpect(status().isOk());
+		cargarVariosConsumos();
+		entityManager.flush();
+		entityManager.clear();
+
+		mockMvc.perform(put("/api/ordenes/{id}", ordenId)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"descripcion\":\"Cambio rechazado\",\"costoFinal\":29752.99}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.title").value("Datos inválidos"))
+				.andExpect(jsonPath("$.detail")
+						.value("El costo final no puede ser menor que el costo de repuestos"))
+				.andExpect(jsonPath("$.errores.costoFinal")
+						.value("El costo final no puede ser menor que el costo de repuestos"));
+
+		entityManager.flush();
+		entityManager.clear();
+		Orden recuperada = entityManager.find(Orden.class, ordenId);
+		assertThat(recuperada.getDescripcion()).isEqualTo("Trabajo anterior");
+		assertThat(recuperada.getCostoFinal()).isEqualByComparingTo("45000.75");
+		assertThat(recuperada.getCostoRepuestos()).isEqualByComparingTo("29753.00");
+		assertThat(consumoRepuestoRepository.count()).isEqualTo(2);
+		assertThat(repuestoRepository.findById(repuestoId).orElseThrow().getStock()).isEqualTo(8);
+	}
+
+	private void cargarVariosConsumos() throws Exception {
+		long otroRepuestoId = crearPorApi("/api/repuestos",
+				"{\"nombre\":\"Bujía\",\"precio\":4250.50,\"stock\":10}");
+		crearPorApi("/api/ordenes/" + ordenId + "/repuestos",
+				"{\"repuestoId\":%d,\"cantidad\":2}".formatted(repuestoId));
+		crearPorApi("/api/ordenes/" + ordenId + "/repuestos",
+				"{\"repuestoId\":%d,\"cantidad\":3}".formatted(otroRepuestoId));
 	}
 
 	static Stream<Arguments> consumosInvalidos() {

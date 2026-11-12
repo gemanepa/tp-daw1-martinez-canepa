@@ -42,6 +42,15 @@ public class ManejadorGlobalExcepciones {
 		return problema;
 	}
 
+	@ExceptionHandler(CostoFinalInvalidoException.class)
+	public ProblemDetail costoFinalInvalido(CostoFinalInvalidoException excepcion) {
+		ProblemDetail problema = ProblemDetail.forStatusAndDetail(
+				HttpStatus.BAD_REQUEST, excepcion.getMessage());
+		problema.setTitle("Datos inválidos");
+		problema.setProperty("errores", Map.of("costoFinal", excepcion.getMessage()));
+		return problema;
+	}
+
 	@ExceptionHandler(OperacionNoPermitidaException.class)
 	public ProblemDetail operacionNoPermitida(OperacionNoPermitidaException excepcion) {
 		ProblemDetail problema = ProblemDetail.forStatusAndDetail(

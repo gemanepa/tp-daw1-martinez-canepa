@@ -45,6 +45,7 @@ public class ConsumoRepuestoService {
 		consumo.setOrden(orden);
 		consumo.setRepuesto(repuesto);
 		consumo.setCantidad(solicitud.cantidad());
+		orden.getConsumos().add(consumo);
 		return consumoRepuestoRepository.save(consumo);
 	}
 

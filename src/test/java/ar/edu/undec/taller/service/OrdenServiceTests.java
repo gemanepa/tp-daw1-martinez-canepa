@@ -2,10 +2,13 @@ package ar.edu.undec.taller.service;
 
 import ar.edu.undec.taller.dto.OrdenActualizacionSolicitud;
 import ar.edu.undec.taller.dto.OrdenSolicitud;
+import ar.edu.undec.taller.exception.CostoFinalInvalidoException;
 import ar.edu.undec.taller.exception.OperacionNoPermitidaException;
 import ar.edu.undec.taller.exception.RecursoNoEncontradoException;
+import ar.edu.undec.taller.model.ConsumoRepuesto;
 import ar.edu.undec.taller.model.EstadoOrden;
 import ar.edu.undec.taller.model.Orden;
+import ar.edu.undec.taller.model.Repuesto;
 import ar.edu.undec.taller.model.Vehiculo;
 import ar.edu.undec.taller.repository.OrdenRepository;
 import ar.edu.undec.taller.repository.VehiculoRepository;
@@ -17,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -135,6 +139,53 @@ class OrdenServiceTests {
 				.hasMessage("No se puede entregar una orden sin costo final");
 		assertThat(orden).usingRecursiveComparison().isEqualTo(anterior);
 		verify(ordenRepository, never()).save(any(Orden.class));
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"29753.00", "35000.50"})
+	void sumarPrecioPorCantidadYPermitirCostoFinalIgualOMayor(String costoFinal) {
+		Orden orden = ordenConConsumos();
+		when(ordenRepository.findById(1L)).thenReturn(Optional.of(orden));
+		when(ordenRepository.save(orden)).thenReturn(orden);
+
+		Orden actualizada = ordenService.actualizar(1L,
+				new OrdenActualizacionSolicitud("Reparación completa", new BigDecimal(costoFinal)));
+
+		assertThat(actualizada.getCostoRepuestos()).isEqualByComparingTo("29753.00");
+		assertThat(actualizada.getCostoFinal()).isEqualByComparingTo(costoFinal);
+		assertThat(actualizada.getDescripcion()).isEqualTo("Reparación completa");
+	}
+
+	@Test
+	void costoFinalInferiorRechazaLaActualizacionSinModificarLaOrden() {
+		Orden orden = ordenConConsumos();
+		Orden anterior = ordenConConsumos();
+		when(ordenRepository.findById(1L)).thenReturn(Optional.of(orden));
+
+		assertThatThrownBy(() -> ordenService.actualizar(1L,
+				new OrdenActualizacionSolicitud("Cambio rechazado", new BigDecimal("29752.99"))))
+				.isInstanceOf(CostoFinalInvalidoException.class)
+				.hasMessage("El costo final no puede ser menor que el costo de repuestos");
+		assertThat(orden).usingRecursiveComparison().isEqualTo(anterior);
+		verify(ordenRepository, never()).save(any(Orden.class));
+	}
+
+	private Orden ordenConConsumos() {
+		Orden orden = ordenEnEstado(EstadoOrden.EN_REPARACION);
+		Repuesto filtro = new Repuesto();
+		filtro.setPrecio(new BigDecimal("8500.75"));
+		ConsumoRepuesto primero = new ConsumoRepuesto();
+		primero.setOrden(orden);
+		primero.setRepuesto(filtro);
+		primero.setCantidad(2);
+		Repuesto bujia = new Repuesto();
+		bujia.setPrecio(new BigDecimal("4250.50"));
+		ConsumoRepuesto segundo = new ConsumoRepuesto();
+		segundo.setOrden(orden);
+		segundo.setRepuesto(bujia);
+		segundo.setCantidad(3);
+		orden.getConsumos().addAll(List.of(primero, segundo));
+		return orden;
 	}
 
 	private Orden ordenEnEstado(EstadoOrden estado) {
