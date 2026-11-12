@@ -1,10 +1,13 @@
 package ar.edu.undec.taller.controller;
 
+import ar.edu.undec.taller.dto.ConsumoRepuestoSolicitud;
 import ar.edu.undec.taller.dto.OrdenActualizacionSolicitud;
 import ar.edu.undec.taller.dto.OrdenEstadoSolicitud;
 import ar.edu.undec.taller.dto.OrdenSolicitud;
+import ar.edu.undec.taller.model.ConsumoRepuesto;
 import ar.edu.undec.taller.model.EstadoOrden;
 import ar.edu.undec.taller.model.Orden;
+import ar.edu.undec.taller.service.ConsumoRepuestoService;
 import ar.edu.undec.taller.service.OrdenService;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -25,9 +28,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class OrdenController {
 
 	private final OrdenService ordenService;
+	private final ConsumoRepuestoService consumoRepuestoService;
 
-	public OrdenController(OrdenService ordenService) {
+	public OrdenController(OrdenService ordenService, ConsumoRepuestoService consumoRepuestoService) {
 		this.ordenService = ordenService;
+		this.consumoRepuestoService = consumoRepuestoService;
 	}
 
 	@GetMapping
@@ -50,6 +55,14 @@ public class OrdenController {
 	@PatchMapping("/{id}/estado")
 	public Orden cambiarEstado(@PathVariable Long id, @Valid @RequestBody OrdenEstadoSolicitud solicitud) {
 		return ordenService.cambiarEstado(id, solicitud.estado());
+	}
+
+	@PostMapping("/{id}/repuestos")
+	public ResponseEntity<ConsumoRepuesto> registrarRepuesto(@PathVariable Long id,
+			@Valid @RequestBody ConsumoRepuestoSolicitud solicitud) {
+		ConsumoRepuesto creado = consumoRepuestoService.registrar(id, solicitud);
+		return ResponseEntity.created(URI.create("/api/ordenes/" + id + "/repuestos/" + creado.getId()))
+				.body(creado);
 	}
 
 }
