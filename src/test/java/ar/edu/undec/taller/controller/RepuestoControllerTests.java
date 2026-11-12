@@ -1,6 +1,8 @@
 package ar.edu.undec.taller.controller;
 
+import ar.edu.undec.taller.model.Repuesto;
 import ar.edu.undec.taller.repository.RepuestoRepository;
+import java.math.BigDecimal;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -18,6 +20,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -38,6 +41,34 @@ class RepuestoControllerTests {
 		this.mockMvc = mockMvc;
 		this.repuestoRepository = repuestoRepository;
 		this.jsonMapper = jsonMapper;
+	}
+
+	@Test
+	void listarSinRepuestosDevuelve200YArrayVacio() throws Exception {
+		mockMvc.perform(get("/api/repuestos"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$").isArray())
+				.andExpect(jsonPath("$").isEmpty());
+	}
+
+	@Test
+	void listarRepuestosDevuelve200ConIdentificadoresNombresPreciosYStock() throws Exception {
+		Repuesto primero = guardarRepuesto("Filtro de aceite", "8500.75", 10);
+		Repuesto segundo = guardarRepuesto("Bujía", "4250.50", 0);
+		String jsonEsperado = """
+				[
+				  {"id":%d,"nombre":"Filtro de aceite","precio":8500.75,"stock":10},
+				  {"id":%d,"nombre":"Bujía","precio":4250.50,"stock":0}
+				]
+				""".formatted(primero.getId(), segundo.getId());
+
+		mockMvc.perform(get("/api/repuestos"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+				.andExpect(jsonPath("$").isArray())
+				.andExpect(jsonPath("$.length()").value(2))
+				.andExpect(content().json(jsonEsperado));
 	}
 
 	@Test
@@ -97,6 +128,14 @@ class RepuestoControllerTests {
 				.andExpect(jsonPath("$.detail").value("El JSON enviado no es válido"));
 
 		assertThat(repuestoRepository.count()).isEqualTo(cantidadAnterior);
+	}
+
+	private Repuesto guardarRepuesto(String nombre, String precio, int stock) {
+		Repuesto repuesto = new Repuesto();
+		repuesto.setNombre(nombre);
+		repuesto.setPrecio(new BigDecimal(precio));
+		repuesto.setStock(stock);
+		return repuestoRepository.saveAndFlush(repuesto);
 	}
 
 	static Stream<Arguments> repuestosInvalidos() {
