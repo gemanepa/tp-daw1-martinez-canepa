@@ -1,32 +1,1008 @@
-### Archivo de pruebas · reemplazá las rutas por las de tu enunciado
-### En IntelliJ: abrí este archivo y tocá el ▶ verde de cada petición.
+# Ejecutar todas las peticiones en orden desde IntelliJ HTTP Client.
+# Iniciar con H2 vacía; reiniciar esta aplicación para repetir el recorrido:
+# ./mvnw spring-boot:run -Dspring-boot.run.arguments="--spring.datasource.url=jdbc:h2:mem:pruebas-http --spring.jpa.hibernate.ddl-auto=create-drop"
+# Los ids y el mes de entrega se toman de las respuestas.
 
 @base = http://localhost:8080/api
+@inexistente = 999999
 
-### Listar
-GET {{base}}/recursos
+### Vehículos sin datos (200)
+GET {{base}}/vehiculos
 
-### Crear
-POST {{base}}/recursos
+> {%
+client.test("Vehículos sin datos", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(Array.isArray(response.body) && response.body.length === 0, "Lista vacía");
+});
+%}
+
+### Órdenes sin datos (200)
+GET {{base}}/ordenes
+
+> {%
+client.test("Órdenes sin datos", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(Array.isArray(response.body) && response.body.length === 0, "Lista vacía");
+});
+%}
+
+### Repuestos sin datos (200)
+GET {{base}}/repuestos
+
+> {%
+client.test("Repuestos sin datos", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(Array.isArray(response.body) && response.body.length === 0, "Lista vacía");
+});
+%}
+
+### Crear cliente (201)
+POST {{base}}/clientes
 Content-Type: application/json
 
-{
-  "campo1": "valor",
-  "campo2": "valor",
-  "campo3": "valor"
-}
+{"nombre":"Carlos Ruiz","telefono":"3825123456"}
 
-### Buscar por id
-GET {{base}}/recursos/1
+> {%
+client.test("Crear cliente", function () {
+    client.assert(response.status === 201, "Se esperaba HTTP 201");
+    client.assert(typeof response.body.id === "number", "Id generado");
+    client.assert(response.headers.valueOf("Location") === "/api/clientes/" + response.body.id, "Location del recurso creado");
+    client.global.set("clienteId", response.body.id.toString());
+});
+%}
 
-### Error de validación (400)
-POST {{base}}/recursos
+### Crear otro cliente (201)
+POST {{base}}/clientes
 Content-Type: application/json
 
-{ "campo1": "" }
+{"nombre":"Ana Díaz","telefono":"3825000000"}
 
-### Cambiar estado
-PATCH {{base}}/otro-recurso/1/estado
+> {%
+client.test("Crear otro cliente", function () {
+    client.assert(response.status === 201, "Se esperaba HTTP 201");
+    client.assert(typeof response.body.id === "number", "Id generado");
+    client.assert(response.headers.valueOf("Location") === "/api/clientes/" + response.body.id, "Location del recurso creado");
+    client.global.set("otroClienteId", response.body.id.toString());
+});
+%}
+
+### Cliente con campos vacíos (400)
+POST {{base}}/clientes
 Content-Type: application/json
 
-{ "estado": "OTRO_ESTADO" }
+{"nombre":"","telefono":""}
+
+> {%
+client.test("Cliente con campos vacíos", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+    client.assert(response.body.errores.nombre && response.body.errores.telefono, "Errores por campo");
+});
+%}
+
+### Cliente con campos ausentes (400)
+POST {{base}}/clientes
+Content-Type: application/json
+
+{}
+
+> {%
+client.test("Cliente con campos ausentes", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+    client.assert(response.body.errores.nombre && response.body.errores.telefono, "Campos obligatorios");
+});
+%}
+
+### JSON mal formado (400)
+POST {{base}}/clientes
+Content-Type: application/json
+
+{"nombre":"Carlos Ruiz"
+
+> {%
+client.test("JSON mal formado", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Cliente sin vehículos (200)
+GET {{base}}/clientes/{{otroClienteId}}/vehiculos
+
+> {%
+client.test("Cliente sin vehículos", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(Array.isArray(response.body) && response.body.length === 0, "Lista vacía");
+});
+%}
+
+### Crear vehículo ABC123 (201)
+POST {{base}}/vehiculos
+Content-Type: application/json
+
+{"patente":"ABC123","marca":"Fiat","modelo":"Cronos","clienteId":{{clienteId}}}
+
+> {%
+client.test("Crear vehículo ABC123", function () {
+    client.assert(response.status === 201, "Se esperaba HTTP 201");
+    client.assert(typeof response.body.id === "number", "Id generado");
+    client.assert(response.headers.valueOf("Location") === "/api/vehiculos/" + response.body.id, "Location del recurso creado");
+    client.assert(response.body.clienteId === Number(client.global.get("clienteId")), "Relación con cliente");
+    client.global.set("vehiculoId", response.body.id.toString());
+});
+%}
+
+### Crear vehículo AB123CD de otro cliente (201)
+POST {{base}}/vehiculos
+Content-Type: application/json
+
+{"patente":"AB123CD","marca":"VW","modelo":"Gol","clienteId":{{otroClienteId}}}
+
+> {%
+client.test("Crear vehículo AB123CD de otro cliente", function () {
+    client.assert(response.status === 201, "Se esperaba HTTP 201");
+    client.assert(typeof response.body.id === "number", "Id generado");
+    client.assert(response.headers.valueOf("Location") === "/api/vehiculos/" + response.body.id, "Location del recurso creado");
+    client.global.set("otroVehiculoId", response.body.id.toString());
+});
+%}
+
+### Listar vehículos guardados (200)
+GET {{base}}/vehiculos
+
+> {%
+client.test("Listar vehículos guardados", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(Array.isArray(response.body) && response.body.length === 2, "Dos vehículos");
+});
+%}
+
+### Consultar vehículo por id (200)
+GET {{base}}/vehiculos/{{vehiculoId}}
+
+> {%
+client.test("Consultar vehículo por id", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.patente === "ABC123" && response.body.id === Number(client.global.get("vehiculoId")), "Vehículo guardado");
+});
+%}
+
+### Actualizar conservando la propia patente (200)
+PUT {{base}}/vehiculos/{{vehiculoId}}
+Content-Type: application/json
+
+{"patente":"ABC123","marca":"Fiat","modelo":"Cronos 1.3","clienteId":{{clienteId}}}
+
+> {%
+client.test("Actualizar conservando la propia patente", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.id === Number(client.global.get("vehiculoId")) && response.body.modelo === "Cronos 1.3", "Id conservado y modelo actualizado");
+});
+%}
+
+### Vehículo con datos inválidos (400)
+POST {{base}}/vehiculos
+Content-Type: application/json
+
+{"patente":"123","marca":"","modelo":"","clienteId":null}
+
+> {%
+client.test("Vehículo con datos inválidos", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+    client.assert(response.body.errores.patente && response.body.errores.marca && response.body.errores.modelo && response.body.errores.clienteId, "Validaciones del vehículo");
+});
+%}
+
+### Vehículo con cliente inexistente (404)
+POST {{base}}/vehiculos
+Content-Type: application/json
+
+{"patente":"DEF456","marca":"Fiat","modelo":"Cronos","clienteId":{{inexistente}}}
+
+> {%
+client.test("Vehículo con cliente inexistente", function () {
+    client.assert(response.status === 404, "Se esperaba HTTP 404");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 404 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Patente repetida (409)
+POST {{base}}/vehiculos
+Content-Type: application/json
+
+{"patente":"ABC123","marca":"Fiat","modelo":"Cronos","clienteId":{{clienteId}}}
+
+> {%
+client.test("Patente repetida", function () {
+    client.assert(response.status === 409, "Se esperaba HTTP 409");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 409 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Actualizar con patente de otro vehículo (409)
+PUT {{base}}/vehiculos/{{vehiculoId}}
+Content-Type: application/json
+
+{"patente":"AB123CD","marca":"Fiat","modelo":"Cronos","clienteId":{{clienteId}}}
+
+> {%
+client.test("Actualizar con patente de otro vehículo", function () {
+    client.assert(response.status === 409, "Se esperaba HTTP 409");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 409 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Actualizar vehículo con datos inválidos (400)
+PUT {{base}}/vehiculos/{{vehiculoId}}
+Content-Type: application/json
+
+{}
+
+> {%
+client.test("Actualizar vehículo con datos inválidos", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Actualizar vehículo inexistente (404)
+PUT {{base}}/vehiculos/{{inexistente}}
+Content-Type: application/json
+
+{"patente":"ABC123","marca":"Fiat","modelo":"Cronos","clienteId":{{clienteId}}}
+
+> {%
+client.test("Actualizar vehículo inexistente", function () {
+    client.assert(response.status === 404, "Se esperaba HTTP 404");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 404 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Consultar vehículo inexistente (404)
+GET {{base}}/vehiculos/{{inexistente}}
+
+> {%
+client.test("Consultar vehículo inexistente", function () {
+    client.assert(response.status === 404, "Se esperaba HTTP 404");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 404 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Consultar con id no numérico (400)
+GET {{base}}/vehiculos/abc
+
+> {%
+client.test("Consultar con id no numérico", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Filtrar vehículos por cliente (200)
+GET {{base}}/clientes/{{clienteId}}/vehiculos
+
+> {%
+client.test("Filtrar vehículos por cliente", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.length === 1 && response.body[0].id === Number(client.global.get("vehiculoId")), "Solo el vehículo del cliente");
+});
+%}
+
+### Consultar vehículos de cliente inexistente (404)
+GET {{base}}/clientes/{{inexistente}}/vehiculos
+
+> {%
+client.test("Consultar vehículos de cliente inexistente", function () {
+    client.assert(response.status === 404, "Se esperaba HTTP 404");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 404 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Crear vehículo para borrar (201)
+POST {{base}}/vehiculos
+Content-Type: application/json
+
+{"patente":"DEF456","marca":"Fiat","modelo":"Uno","clienteId":{{clienteId}}}
+
+> {%
+client.test("Crear vehículo para borrar", function () {
+    client.assert(response.status === 201, "Se esperaba HTTP 201");
+    client.assert(typeof response.body.id === "number", "Id generado");
+    client.assert(response.headers.valueOf("Location") === "/api/vehiculos/" + response.body.id, "Location del recurso creado");
+    client.global.set("vehiculoBorrableId", response.body.id.toString());
+});
+%}
+
+### Borrar vehículo sin órdenes (204)
+DELETE {{base}}/vehiculos/{{vehiculoBorrableId}}
+
+> {%
+client.test("Borrar vehículo sin órdenes", function () {
+    client.assert(response.status === 204, "Se esperaba HTTP 204");
+    client.assert(!response.body, "Borrado sin cuerpo");
+});
+%}
+
+### El vehículo borrado ya no existe (404)
+GET {{base}}/vehiculos/{{vehiculoBorrableId}}
+
+> {%
+client.test("El vehículo borrado ya no existe", function () {
+    client.assert(response.status === 404, "Se esperaba HTTP 404");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 404 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Borrar vehículo inexistente (404)
+DELETE {{base}}/vehiculos/{{inexistente}}
+
+> {%
+client.test("Borrar vehículo inexistente", function () {
+    client.assert(response.status === 404, "Se esperaba HTTP 404");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 404 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Borrar con id no numérico (400)
+DELETE {{base}}/vehiculos/abc
+
+> {%
+client.test("Borrar con id no numérico", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Orden con datos ausentes (400)
+POST {{base}}/ordenes
+Content-Type: application/json
+
+{}
+
+> {%
+client.test("Orden con datos ausentes", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+    client.assert(response.body.errores.vehiculoId && response.body.errores.descripcion, "Validaciones de la orden");
+});
+%}
+
+### Orden para vehículo inexistente (404)
+POST {{base}}/ordenes
+Content-Type: application/json
+
+{"vehiculoId":{{inexistente}},"descripcion":"Revisión"}
+
+> {%
+client.test("Orden para vehículo inexistente", function () {
+    client.assert(response.status === 404, "Se esperaba HTTP 404");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 404 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Crear orden principal (201)
+POST {{base}}/ordenes
+Content-Type: application/json
+
+{"vehiculoId":{{vehiculoId}},"descripcion":"Cambio de aceite"}
+
+> {%
+client.test("Crear orden principal", function () {
+    client.assert(response.status === 201, "Se esperaba HTTP 201");
+    client.assert(typeof response.body.id === "number", "Id generado");
+    client.assert(response.headers.valueOf("Location") === "/api/ordenes/" + response.body.id, "Location del recurso creado");
+    client.assert(response.body.estado === "INGRESADO" && response.body.vehiculoId === Number(client.global.get("vehiculoId")), "Estado inicial y vehículo");
+    client.assert(typeof response.body.fechaIngreso === "string", "Fecha de ingreso");
+    client.global.set("mesIngreso", response.body.fechaIngreso.substring(0, 7));
+    client.global.set("ordenId", response.body.id.toString());
+});
+%}
+
+### Crear orden de otro vehículo (201)
+POST {{base}}/ordenes
+Content-Type: application/json
+
+{"vehiculoId":{{otroVehiculoId}},"descripcion":"Revisión de frenos"}
+
+> {%
+client.test("Crear orden de otro vehículo", function () {
+    client.assert(response.status === 201, "Se esperaba HTTP 201");
+    client.assert(typeof response.body.id === "number", "Id generado");
+    client.assert(response.headers.valueOf("Location") === "/api/ordenes/" + response.body.id, "Location del recurso creado");
+    client.global.set("otraOrdenId", response.body.id.toString());
+});
+%}
+
+### Rechazar otra orden abierta del mismo vehículo (409)
+POST {{base}}/ordenes
+Content-Type: application/json
+
+{"vehiculoId":{{vehiculoId}},"descripcion":"Cambio de aceite"}
+
+> {%
+client.test("Rechazar otra orden abierta del mismo vehículo", function () {
+    client.assert(response.status === 409, "Se esperaba HTTP 409");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 409 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Listar órdenes de ambos vehículos (200)
+GET {{base}}/ordenes
+
+> {%
+client.test("Listar órdenes de ambos vehículos", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(Array.isArray(response.body) && response.body.length === 2, "Solo dos órdenes guardadas");
+});
+%}
+
+### Filtro de estado inválido (400)
+GET {{base}}/ordenes?estado=DESCONOCIDO
+
+> {%
+client.test("Filtro de estado inválido", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Actualizar orden con descripción vacía (400)
+PUT {{base}}/ordenes/{{ordenId}}
+Content-Type: application/json
+
+{"descripcion":"","costoFinal":45000.75}
+
+> {%
+client.test("Actualizar orden con descripción vacía", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+    client.assert(response.body.errores.descripcion, "Descripción obligatoria");
+});
+%}
+
+### Actualizar orden inexistente (404)
+PUT {{base}}/ordenes/{{inexistente}}
+Content-Type: application/json
+
+{"descripcion":"Revisión","costoFinal":45000.75}
+
+> {%
+client.test("Actualizar orden inexistente", function () {
+    client.assert(response.status === 404, "Se esperaba HTTP 404");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 404 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Actualizar orden con id no numérico (400)
+PUT {{base}}/ordenes/abc
+Content-Type: application/json
+
+{"descripcion":"Revisión","costoFinal":45000.75}
+
+> {%
+client.test("Actualizar orden con id no numérico", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Cambio de estado ausente (400)
+PATCH {{base}}/ordenes/{{ordenId}}/estado
+Content-Type: application/json
+
+{}
+
+> {%
+client.test("Cambio de estado ausente", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+    client.assert(response.body.errores.estado, "Estado obligatorio");
+});
+%}
+
+### Cambio de estado inválido (400)
+PATCH {{base}}/ordenes/{{ordenId}}/estado
+Content-Type: application/json
+
+{"estado":"DESCONOCIDO"}
+
+> {%
+client.test("Cambio de estado inválido", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Cambiar estado de orden inexistente (404)
+PATCH {{base}}/ordenes/{{inexistente}}/estado
+Content-Type: application/json
+
+{"estado":"EN_REPARACION"}
+
+> {%
+client.test("Cambiar estado de orden inexistente", function () {
+    client.assert(response.status === 404, "Se esperaba HTTP 404");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 404 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Rechazar salto de INGRESADO a TERMINADO (409)
+PATCH {{base}}/ordenes/{{ordenId}}/estado
+Content-Type: application/json
+
+{"estado":"TERMINADO"}
+
+> {%
+client.test("Rechazar salto de INGRESADO a TERMINADO", function () {
+    client.assert(response.status === 409, "Se esperaba HTTP 409");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 409 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Iniciar reparación (200)
+PATCH {{base}}/ordenes/{{ordenId}}/estado
+Content-Type: application/json
+
+{"estado":"EN_REPARACION"}
+
+> {%
+client.test("Iniciar reparación", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.estado === "EN_REPARACION" && response.body.fechaTerminacion === null, "Inicio sin terminación");
+    client.assert(response.body.horasEnReparacion === undefined, "Horas pendientes");
+    client.global.set("fechaInicioReparacion", response.body.fechaInicioReparacion);
+});
+%}
+
+### Rechazar cancelación desde EN_REPARACION (409)
+PATCH {{base}}/ordenes/{{ordenId}}/estado
+Content-Type: application/json
+
+{"estado":"CANCELADO"}
+
+> {%
+client.test("Rechazar cancelación desde EN_REPARACION", function () {
+    client.assert(response.status === 409, "Se esperaba HTTP 409");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 409 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Filtrar órdenes en reparación (200)
+GET {{base}}/ordenes?estado=EN_REPARACION
+
+> {%
+client.test("Filtrar órdenes en reparación", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.length === 1 && response.body[0].id === Number(client.global.get("ordenId")), "Solo la orden en reparación");
+});
+%}
+
+### Crear filtro de aceite (201)
+POST {{base}}/repuestos
+Content-Type: application/json
+
+{"nombre":"Filtro de aceite","precio":8500.75,"stock":10}
+
+> {%
+client.test("Crear filtro de aceite", function () {
+    client.assert(response.status === 201, "Se esperaba HTTP 201");
+    client.assert(typeof response.body.id === "number", "Id generado");
+    client.assert(response.headers.valueOf("Location") === "/api/repuestos/" + response.body.id, "Location del recurso creado");
+    client.global.set("repuestoId", response.body.id.toString());
+});
+%}
+
+### Crear bujía (201)
+POST {{base}}/repuestos
+Content-Type: application/json
+
+{"nombre":"Bujía","precio":4250.50,"stock":10}
+
+> {%
+client.test("Crear bujía", function () {
+    client.assert(response.status === 201, "Se esperaba HTTP 201");
+    client.assert(typeof response.body.id === "number", "Id generado");
+    client.assert(response.headers.valueOf("Location") === "/api/repuestos/" + response.body.id, "Location del recurso creado");
+    client.global.set("otroRepuestoId", response.body.id.toString());
+});
+%}
+
+### Repuesto con datos inválidos (400)
+POST {{base}}/repuestos
+Content-Type: application/json
+
+{}
+
+> {%
+client.test("Repuesto con datos inválidos", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+    client.assert(response.body.errores.nombre && response.body.errores.precio && response.body.errores.stock, "Validaciones del repuesto");
+});
+%}
+
+### Listar repuestos antes del consumo (200)
+GET {{base}}/repuestos
+
+> {%
+client.test("Listar repuestos antes del consumo", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.length === 2 && response.body.every(r => r.stock === 10), "Stock inicial");
+});
+%}
+
+### Consumo para orden inexistente (404)
+POST {{base}}/ordenes/{{inexistente}}/repuestos
+Content-Type: application/json
+
+{"repuestoId":{{repuestoId}},"cantidad":2}
+
+> {%
+client.test("Consumo para orden inexistente", function () {
+    client.assert(response.status === 404, "Se esperaba HTTP 404");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 404 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Consumo de repuesto inexistente (404)
+POST {{base}}/ordenes/{{ordenId}}/repuestos
+Content-Type: application/json
+
+{"repuestoId":{{inexistente}},"cantidad":2}
+
+> {%
+client.test("Consumo de repuesto inexistente", function () {
+    client.assert(response.status === 404, "Se esperaba HTTP 404");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 404 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Consumo con cantidad inválida (400)
+POST {{base}}/ordenes/{{ordenId}}/repuestos
+Content-Type: application/json
+
+{"repuestoId":{{repuestoId}},"cantidad":0}
+
+> {%
+client.test("Consumo con cantidad inválida", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+    client.assert(response.body.errores.cantidad, "Cantidad positiva");
+});
+%}
+
+### Rechazar consumo sin stock suficiente (409)
+POST {{base}}/ordenes/{{ordenId}}/repuestos
+Content-Type: application/json
+
+{"repuestoId":{{repuestoId}},"cantidad":11}
+
+> {%
+client.test("Rechazar consumo sin stock suficiente", function () {
+    client.assert(response.status === 409, "Se esperaba HTTP 409");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 409 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### El consumo rechazado no descontó stock (200)
+GET {{base}}/repuestos
+
+> {%
+client.test("El consumo rechazado no descontó stock", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.every(r => r.stock === 10), "Stock sin cambios");
+});
+%}
+
+### Registrar dos filtros (201)
+POST {{base}}/ordenes/{{ordenId}}/repuestos
+Content-Type: application/json
+
+{"repuestoId":{{repuestoId}},"cantidad":2}
+
+> {%
+client.test("Registrar dos filtros", function () {
+    client.assert(response.status === 201, "Se esperaba HTTP 201");
+    client.assert(typeof response.body.id === "number", "Id generado");
+    client.assert(response.headers.valueOf("Location") === "/api/ordenes/" + client.global.get("ordenId") + "/repuestos/" + response.body.id, "Location del recurso creado");
+    client.assert(response.body.ordenId === Number(client.global.get("ordenId")) && response.body.repuestoId === Number(client.global.get("repuestoId")) && response.body.cantidad === 2, "Consumo asociado");
+});
+%}
+
+### Registrar tres bujías (201)
+POST {{base}}/ordenes/{{ordenId}}/repuestos
+Content-Type: application/json
+
+{"repuestoId":{{otroRepuestoId}},"cantidad":3}
+
+> {%
+client.test("Registrar tres bujías", function () {
+    client.assert(response.status === 201, "Se esperaba HTTP 201");
+    client.assert(typeof response.body.id === "number", "Id generado");
+    client.assert(response.headers.valueOf("Location") === "/api/ordenes/" + client.global.get("ordenId") + "/repuestos/" + response.body.id, "Location del recurso creado");
+    client.assert(response.body.cantidad === 3 && response.body.repuestoId === Number(client.global.get("otroRepuestoId")), "Consumo de bujías");
+});
+%}
+
+### Comprobar existencias descontadas (200)
+GET {{base}}/repuestos
+
+> {%
+client.test("Comprobar existencias descontadas", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.find(r => r.id === Number(client.global.get("repuestoId"))).stock === 8, "Ocho filtros");
+    client.assert(response.body.find(r => r.id === Number(client.global.get("otroRepuestoId"))).stock === 7, "Siete bujías");
+});
+%}
+
+### Calcular costo de varios consumos (200)
+GET {{base}}/ordenes
+
+> {%
+client.test("Calcular costo de varios consumos", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    const orden = response.body.find(o => o.id === Number(client.global.get("ordenId")));
+    client.assert(orden.costoRepuestos === 29753 && orden.costoFinal === null && orden.descripcion === "Cambio de aceite", "Costo calculado sin consumo rechazado");
+    client.assert(response.body.find(o => o.id === Number(client.global.get("otraOrdenId"))).costoRepuestos === undefined, "Orden ajena sin consumos");
+});
+%}
+
+### Rechazar costo final inferior a repuestos (400)
+PUT {{base}}/ordenes/{{ordenId}}
+Content-Type: application/json
+
+{"descripcion":"Cambio rechazado","costoFinal":29752.99}
+
+> {%
+client.test("Rechazar costo final inferior a repuestos", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+    client.assert(response.body.errores.costoFinal, "Error en costoFinal");
+});
+%}
+
+### El costo rechazado no modificó la orden (200)
+GET {{base}}/ordenes?estado=EN_REPARACION
+
+> {%
+client.test("El costo rechazado no modificó la orden", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body[0].descripcion === "Cambio de aceite" && response.body[0].costoFinal === null && response.body[0].costoRepuestos === 29753, "Descripción y costos conservados");
+});
+%}
+
+### Terminar reparación y calcular horas (200)
+PATCH {{base}}/ordenes/{{ordenId}}/estado
+Content-Type: application/json
+
+{"estado":"TERMINADO"}
+
+> {%
+client.test("Terminar reparación y calcular horas", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.estado === "TERMINADO" && response.body.costoRepuestos === 29753, "Orden terminada");
+    client.assert(typeof response.body.horasEnReparacion === "number" && response.body.horasEnReparacion >= 0, "Horas calculadas sin esperas");
+    client.assert(response.body.fechaInicioReparacion === client.global.get("fechaInicioReparacion"), "Inicio conservado");
+    client.global.set("fechaTerminacion", response.body.fechaTerminacion);
+    client.global.set("horasReparacion", response.body.horasEnReparacion.toString());
+});
+%}
+
+### Rechazar entrega sin costo final (409)
+PATCH {{base}}/ordenes/{{ordenId}}/estado
+Content-Type: application/json
+
+{"estado":"ENTREGADO"}
+
+> {%
+client.test("Rechazar entrega sin costo final", function () {
+    client.assert(response.status === 409, "Se esperaba HTTP 409");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 409 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Cargar costo final suficiente (200)
+PUT {{base}}/ordenes/{{ordenId}}
+Content-Type: application/json
+
+{"descripcion":"Cambio de aceite y filtro","costoFinal":45000.75}
+
+> {%
+client.test("Cargar costo final suficiente", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.costoFinal === 45000.75 && response.body.costoRepuestos === 29753 && response.body.estado === "TERMINADO", "Costo final y estado conservado");
+});
+%}
+
+### Orden con costo pero no entregada no factura (200)
+GET {{base}}/ordenes/facturacion?mes={{mesIngreso}}
+
+> {%
+client.test("Orden con costo pero no entregada no factura", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.cantidadOrdenes === 0 && response.body.totalFacturado === 0, "Sin entregas aún");
+});
+%}
+
+### Entregar y conservar horas de reparación (200)
+PATCH {{base}}/ordenes/{{ordenId}}/estado
+Content-Type: application/json
+
+{"estado":"ENTREGADO"}
+
+> {%
+client.test("Entregar y conservar horas de reparación", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.estado === "ENTREGADO" && response.body.costoFinal === 45000.75, "Entrega con costo");
+    client.assert(response.body.horasEnReparacion === Number(client.global.get("horasReparacion")), "Horas conservadas al entregar");
+    client.assert(response.body.fechaInicioReparacion === client.global.get("fechaInicioReparacion") && response.body.fechaTerminacion === client.global.get("fechaTerminacion"), "Fechas conservadas");
+    client.global.set("mesEntrega", response.body.fechaEntrega.substring(0, 7));
+});
+%}
+
+### Crear otra orden después de entregar (201)
+POST {{base}}/ordenes
+Content-Type: application/json
+
+{"vehiculoId":{{vehiculoId}},"descripcion":"Revisar frenos"}
+
+> {%
+client.test("Crear otra orden después de entregar", function () {
+    client.assert(response.status === 201, "Se esperaba HTTP 201");
+    client.assert(typeof response.body.id === "number", "Id generado");
+    client.assert(response.headers.valueOf("Location") === "/api/ordenes/" + response.body.id, "Location del recurso creado");
+    client.global.set("segundaOrdenId", response.body.id.toString());
+});
+%}
+
+### Cancelar desde INGRESADO (200)
+PATCH {{base}}/ordenes/{{segundaOrdenId}}/estado
+Content-Type: application/json
+
+{"estado":"CANCELADO"}
+
+> {%
+client.test("Cancelar desde INGRESADO", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.estado === "CANCELADO" && response.body.fechaCancelacion && response.body.horasEnReparacion === undefined, "Cancelación sin reparación");
+});
+%}
+
+### Crear otra orden después de cancelar (201)
+POST {{base}}/ordenes
+Content-Type: application/json
+
+{"vehiculoId":{{vehiculoId}},"descripcion":"Revisión general"}
+
+> {%
+client.test("Crear otra orden después de cancelar", function () {
+    client.assert(response.status === 201, "Se esperaba HTTP 201");
+    client.assert(typeof response.body.id === "number", "Id generado");
+    client.assert(response.headers.valueOf("Location") === "/api/ordenes/" + response.body.id, "Location del recurso creado");
+    client.global.set("terceraOrdenId", response.body.id.toString());
+});
+%}
+
+### Historial por patente de más nueva a más vieja (200)
+GET {{base}}/vehiculos/patente/ABC123/historial
+
+> {%
+client.test("Historial por patente de más nueva a más vieja", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.length === 3 && response.body.every(o => o.vehiculoId === Number(client.global.get("vehiculoId"))), "Solo órdenes del vehículo");
+    client.assert(response.body[0].id === Number(client.global.get("terceraOrdenId")) && response.body[1].id === Number(client.global.get("segundaOrdenId")) && response.body[2].id === Number(client.global.get("ordenId")), "Orden cronológico descendente");
+    client.assert(response.body[2].horasEnReparacion === Number(client.global.get("horasReparacion")), "Horas conservadas en historial");
+});
+%}
+
+### Facturación del mes de entrega (200)
+GET {{base}}/ordenes/facturacion?mes={{mesEntrega}}
+
+> {%
+client.test("Facturación del mes de entrega", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.cantidadOrdenes === 1 && response.body.totalFacturado === 45000.75, "Solo factura la orden entregada");
+});
+%}
+
+### Facturación de un mes sin entregas (200)
+GET {{base}}/ordenes/facturacion?mes=1900-01
+
+> {%
+client.test("Facturación de un mes sin entregas", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.cantidadOrdenes === 0 && response.body.totalFacturado === 0, "Mes sin entregas");
+});
+%}
+
+### Facturación con mes inválido (400)
+GET {{base}}/ordenes/facturacion?mes=2026-13
+
+> {%
+client.test("Facturación con mes inválido", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Facturación sin mes (400)
+GET {{base}}/ordenes/facturacion
+
+> {%
+client.test("Facturación sin mes", function () {
+    client.assert(response.status === 400, "Se esperaba HTTP 400");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 400 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### Rechazar borrado de vehículo con órdenes (409)
+DELETE {{base}}/vehiculos/{{vehiculoId}}
+
+> {%
+client.test("Rechazar borrado de vehículo con órdenes", function () {
+    client.assert(response.status === 409, "Se esperaba HTTP 409");
+    client.assert(response.contentType.mimeType === "application/problem+json", "Formato de error");
+    client.assert(response.body.status === 409 && response.body.title && response.body.detail, "ProblemDetail completo");
+});
+%}
+
+### El borrado rechazado conserva el vehículo (200)
+GET {{base}}/vehiculos/{{vehiculoId}}
+
+> {%
+client.test("El borrado rechazado conserva el vehículo", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.patente === "ABC123" && response.body.modelo === "Cronos 1.3", "Vehículo conservado");
+});
+%}
+
+### Los rechazos conservaron las órdenes y sus estados (200)
+GET {{base}}/ordenes
+
+> {%
+client.test("Los rechazos conservaron las órdenes y sus estados", function () {
+    client.assert(response.status === 200, "Se esperaba HTTP 200");
+    client.assert(response.body.length === 4, "Cuatro órdenes guardadas");
+    client.assert(response.body.find(o => o.id === Number(client.global.get("ordenId"))).estado === "ENTREGADO", "Entrega conservada");
+    client.assert(response.body.find(o => o.id === Number(client.global.get("segundaOrdenId"))).estado === "CANCELADO", "Cancelación conservada");
+    client.assert(response.body.find(o => o.id === Number(client.global.get("terceraOrdenId"))).estado === "INGRESADO", "Nueva orden abierta");
+});
+%}
