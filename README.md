@@ -18,6 +18,12 @@ Requisitos: Java 21 (Maven viene incluido con `mvnw`).
 
 La API queda en `http://localhost:8080/api`. La base H2 se guarda en `data/taller.mv.db`, conserva los datos entre reinicios y no se sube al repositorio.
 
+Para iniciar con una base H2 descartable en memoria:
+
+```bash
+./mvnw -B -ntp spring-boot:run -Dspring-boot.run.arguments="--spring.datasource.url=jdbc:h2:mem:pruebas-http --spring.jpa.hibernate.ddl-auto=create-drop"
+```
+
 ## Modelo
 
 | Entidad         | Atributos principales                                                                                                      | Relaciones                                    |
@@ -73,3 +79,5 @@ Las pruebas unitarias, de integración y de API están en `src/test/java/ar/edu/
 ```
 
 Las pruebas de Spring usan el perfil `test` con H2 en memoria, sin afectar los datos de desarrollo. Los resultados quedan en `target/surefire-reports/`.
+
+Para ejecutar `pruebas.http`, iniciar la aplicación con la base descartable indicada arriba, abrir el archivo en IntelliJ y elegir **Run All Requests in File**
